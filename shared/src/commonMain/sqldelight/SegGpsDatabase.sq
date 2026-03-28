@@ -1,0 +1,197 @@
+-- ============================================================
+-- allowed_users: whitelist DNIs cargada por admin
+-- ============================================================
+CREATE TABLE IF NOT EXISTS allowed_users (
+    dni TEXT NOT NULL PRIMARY KEY,
+    phone_number TEXT NOT NULL,
+    loaded_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+);
+
+-- ============================================================
+-- users: trabajadores registrados
+-- ============================================================
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT NOT NULL PRIMARY KEY,
+    dni TEXT NOT NULL UNIQUE,
+    phone_number TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    role TEXT NOT NULL,        -- jefe_brigada | nebulizador | anotador | chofer
+    pin TEXT NOT NULL,
+    device_id TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+);
+
+-- ============================================================
+-- sessions: jornadas de trabajo
+-- ============================================================
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    brigade_code TEXT,
+    started_by TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    export_done INTEGER NOT NULL DEFAULT 0
+);
+
+-- ============================================================
+-- gps_tracks: puntos GPS cada 15 segundos
+-- ============================================================
+CREATE TABLE IF NOT EXISTS gps_tracks (
+    id TEXT NOT NULL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    accuracy REAL,
+    captured_at INTEGER NOT NULL,
+    sync_status TEXT NOT NULL DEFAULT 'pending'  -- pending | synced
+);
+
+-- ============================================================
+-- alerts: alertas y mensajes
+-- ============================================================
+CREATE TABLE IF NOT EXISTS alerts (
+    id TEXT NOT NULL PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    alert_type TEXT NOT NULL,  -- agua | gasolina | insumo_quimico | averia_maquina | trabajo_finalizado | broadcast_text
+    message TEXT,
+    target_role TEXT NOT NULL DEFAULT 'all',  -- all | chofer
+    latitude REAL,
+    longitude REAL,
+    is_attended INTEGER NOT NULL DEFAULT 0,
+    attended_by TEXT,
+    created_at INTEGER NOT NULL,
+    sync_status TEXT NOT NULL DEFAULT 'pending'
+);
+
+-- ============================================================
+-- block_assignments: asignacion de manzanas
+-- ============================================================
+CREATE TABLE IF NOT EXISTS block_assignments (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    assigned_to TEXT NOT NULL,
+    assigned_by TEXT NOT NULL,
+    block_name TEXT NOT NULL,
+    notes TEXT,
+    assigned_at INTEGER NOT NULL,
+    sync_status TEXT NOT NULL DEFAULT 'pending'
+);
+
+-- ============================================================
+-- vector_layers: capas vectoriales cargadas por admin
+-- ============================================================
+CREATE TABLE IF NOT EXISTS vector_layers (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT,
+    name TEXT NOT NULL,
+    file_type TEXT NOT NULL,   -- kml | gpkg | geojson
+    storage_path TEXT NOT NULL,
+    uploaded_at INTEGER NOT NULL
+);
+
+-- ============================================================
+-- Queries: allowed_users
+-- ============================================================
+insertAllowedUser:
+INSERT OR REPLACE INTO allowed_users(dni, phone_number, loaded_at)
+VALUES (?, ?, ?);
+
+selectAllowedUserByDni:
+SELECT * FROM allowed_users WHERE dni = ?;
+
+deleteAllAllowedUsers:
+DELETE FROM allowed_users;
+
+-- ============================================================
+-- Queries: users
+-- ============================================================
+insertUser:
+INSERT INTO users(id, dni, phone_number, full_name, role, pin, device_id, is_active, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?);
+
+selectUserByDni:
+SELECT * FROM users WHERE dni = ?;
+
+selectAllUsers:
+SELECT * FROM users WHERE is_active = 1;
+
+updateUserActiveStatus:
+UPDATE users SET is_active = ? WHERE id = ?;
+
+updateUserPin:
+UPDATE users SET pin = ? WHERE id = ?;
+
+-- ============================================================
+-- Queries: sessions
+-- ============================================================
+insertSession:
+INSERT INTO sessions(id, name, brigade_code, started_by, started_at, is_active, export_done)
+VALUES (?, ?, ?, ?, ?, 1, 0);
+
+selectActiveSession:
+SELECT * FROM sessions WHERE is_active = 1 LIMIT 1;
+
+selectActiveSessions:
+SELECT * FROM sessions WHERE is_active = 1;
+
+closeSession:
+UPDATE sessions SET is_active = 0, ended_at = ? WHERE id = ?;
+
+markSessionExported:
+UPDATE sessions SET export_done = 1 WHERE id = ?;
+
+-- ============================================================
+-- Queries: gps_tracks
+-- ============================================================
+insertGpsTrack:
+INSERT INTO gps_tracks(id, user_id, session_id, latitude, longitude, accuracy, captured_at, sync_status)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'pending');
+
+selectPendingGpsTracks:
+SELECT * FROM gps_tracks WHERE sync_status = 'pending' ORDER BY captured_at ASC;
+
+markGpsTrackSynced:
+UPDATE gps_tracks SET sync_status = 'synced' WHERE id = ?;
+
+selectGpsTracksByUserSession:
+SELECT * FROM gps_tracks WHERE user_id = ? AND session_id = ? ORDER BY captured_at ASC;
+
+-- ============================================================
+-- Queries: alerts
+-- ============================================================
+insertAlert:
+INSERT INTO alerts(id, sender_id, session_id, alert_type, message, target_role, latitude, longitude, created_at, sync_status)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending');
+
+selectPendingAlerts:
+SELECT * FROM alerts WHERE sync_status = 'pending' ORDER BY created_at ASC;
+
+markAlertSynced:
+UPDATE alerts SET sync_status = 'synced' WHERE id = ?;
+
+markAlertAttended:
+UPDATE alerts SET is_attended = 1, attended_by = ? WHERE id = ?;
+
+selectAlertsBySession:
+SELECT * FROM alerts WHERE session_id = ? ORDER BY created_at DESC;
+
+-- ============================================================
+-- Queries: block_assignments
+-- ============================================================
+insertBlockAssignment:
+INSERT INTO block_assignments(id, session_id, assigned_to, assigned_by, block_name, notes, assigned_at, sync_status)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'pending');
+
+selectPendingBlockAssignments:
+SELECT * FROM block_assignments WHERE sync_status = 'pending';
+
+markBlockAssignmentSynced:
+UPDATE block_assignments SET sync_status = 'synced' WHERE id = ?;
+
+selectBlockAssignmentsBySession:
+SELECT * FROM block_assignments WHERE session_id = ?;
