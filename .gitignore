@@ -1,0 +1,12 @@
+.gradle/
+build/
+*.iml
+.idea/
+local.properties
+*.class
+*.jks
+*.keystore
+google-services.json
+.DS_Store
+/composeApp/build/
+/shared/build/
