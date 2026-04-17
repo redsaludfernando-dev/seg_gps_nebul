@@ -18,6 +18,9 @@ scripts/*.zip
 scripts/*.exe
 scripts/*.pmtiles
 
+# Excepción: gradle wrapper (necesario para CI)
+!gradle/wrapper/gradle-wrapper.jar
+
 # APK release y mappings de CI
 composeApp/release/*.apk
 composeApp/release/baselineProfiles/
