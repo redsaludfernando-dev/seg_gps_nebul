@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.gson.JsonObject
+import com.redsalud.seggpsnebul.data.remote.ZonaDto
 import com.redsalud.seggpsnebul.map.LocalTileServer
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -18,39 +19,44 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.get
 import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory.*
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 
-private val RIOJA_CENTER = LatLng(-6.058, -77.160)
-private const val DEFAULT_ZOOM = 14.0
-private const val SOURCE_ID    = "users-source"
+private val RIOJA_CENTER      = LatLng(-6.058, -77.160)
+private const val DEFAULT_ZOOM  = 14.0
+private const val SOURCE_ID     = "users-source"
 private const val LAYER_CIRCLES = "users-circles"
+private const val ZONES_SOURCE  = "zones-source"
+private const val ZONES_FILL    = "zones-fill"
+private const val ZONES_LINE    = "zones-line"
 
 actual @Composable fun MapLibreView(
     modifier: Modifier,
     pmtilesPath: String?,
     userPositions: List<UserPosition>,
-    myPosition: UserPosition?
+    myPosition: UserPosition?,
+    zonas: List<ZonaDto>
 ) {
     val tileServer = remember {
         pmtilesPath?.let { LocalTileServer(it).also { s -> s.start() } }
     }
     DisposableEffect(Unit) { onDispose { tileServer?.stop() } }
 
-    // Non-composable callbacks (click listener) need a stable reference to current positions
     val positionsRef = remember { mutableStateOf<List<UserPosition>>(emptyList()) }
+    val zonasRef     = remember { mutableStateOf<List<ZonaDto>>(emptyList()) }
+
     LaunchedEffect(userPositions, myPosition) {
-        positionsRef.value = buildList {
-            myPosition?.let { add(it) }
-            addAll(userPositions)
-        }
+        positionsRef.value = buildList { myPosition?.let { add(it) }; addAll(userPositions) }
     }
+    LaunchedEffect(zonas) { zonasRef.value = zonas }
 
     var selectedUser by remember { mutableStateOf<UserPosition?>(null) }
-    val mapHolder   = remember { MapHolder() }
+    val mapHolder    = remember { MapHolder() }
 
     Box(modifier) {
         AndroidView(
@@ -63,10 +69,26 @@ actual @Composable fun MapLibreView(
                             map.cameraPosition = CameraPosition.Builder()
                                 .target(RIOJA_CENTER).zoom(DEFAULT_ZOOM).build()
 
-                            // Add empty source + circle layer for user positions
-                            style.addSource(
-                                GeoJsonSource(SOURCE_ID, FeatureCollection.fromFeatures(emptyList()))
+                            // ── Fuente + capas de zonas/manzanas ───────────────────────
+                            style.addSource(GeoJsonSource(ZONES_SOURCE, FeatureCollection.fromFeatures(emptyList())))
+                            // Relleno semitransparente
+                            style.addLayer(
+                                FillLayer(ZONES_FILL, ZONES_SOURCE).withProperties(
+                                    fillColor(get("color")),
+                                    fillOpacity(0.18f)
+                                )
                             )
+                            // Contorno
+                            style.addLayer(
+                                LineLayer(ZONES_LINE, ZONES_SOURCE).withProperties(
+                                    lineColor(get("color")),
+                                    lineWidth(2.2f),
+                                    lineOpacity(0.85f)
+                                )
+                            )
+
+                            // ── Fuente + capa de usuarios (encima de zonas) ─────────────
+                            style.addSource(GeoJsonSource(SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
                             style.addLayer(
                                 CircleLayer(LAYER_CIRCLES, SOURCE_ID).withProperties(
                                     circleRadius(9f),
@@ -76,23 +98,24 @@ actual @Composable fun MapLibreView(
                                 )
                             )
 
-                            // Render current positions immediately if already available
+                            // Render inmediato si hay datos
                             positionsRef.value.takeIf { it.isNotEmpty() }?.let {
-                                style.getSourceAs<GeoJsonSource>(SOURCE_ID)
-                                    ?.setGeoJson(buildFeatureCollection(it))
+                                style.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(buildFeatureCollection(it))
+                            }
+                            zonasRef.value.takeIf { it.isNotEmpty() }?.let {
+                                style.getSourceAs<GeoJsonSource>(ZONES_SOURCE)?.setGeoJson(buildZonesCollection(it))
                             }
 
-                            // Tap on a circle → show popup
+                            // Tap → popup de usuario
                             map.addOnMapClickListener { latLng ->
-                                val screenPt = map.projection.toScreenLocation(latLng)
-                                val features = map.queryRenderedFeatures(screenPt, LAYER_CIRCLES)
+                                val pt = map.projection.toScreenLocation(latLng)
+                                val features = map.queryRenderedFeatures(pt, LAYER_CIRCLES)
                                 if (features.isNotEmpty()) {
                                     val uid = features[0].getStringProperty("userId") ?: ""
                                     selectedUser = positionsRef.value.find { it.userId == uid }
                                     selectedUser != null
                                 } else {
-                                    selectedUser = null
-                                    false
+                                    selectedUser = null; false
                                 }
                             }
                         }
@@ -101,77 +124,58 @@ actual @Composable fun MapLibreView(
                 }
             },
             update = { _ ->
-                // Called on every recomposition — updates markers with latest positions
-                mapHolder.map?.style?.getSourceAs<GeoJsonSource>(SOURCE_ID)
+                val style = mapHolder.map?.style ?: return@AndroidView
+                style.getSourceAs<GeoJsonSource>(SOURCE_ID)
                     ?.setGeoJson(buildFeatureCollection(positionsRef.value))
+                style.getSourceAs<GeoJsonSource>(ZONES_SOURCE)
+                    ?.setGeoJson(buildZonesCollection(zonasRef.value))
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Compose popup overlay — shown above the map when a user is tapped
         selectedUser?.let { user ->
             UserPopupCard(
                 user      = user,
-                modifier  = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
+                modifier  = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 onDismiss = { selectedUser = null }
             )
         }
     }
 }
 
-// ─── Popup card ──────────────────────────────────────────────────────────────
+// ─── Popup ────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun UserPopupCard(user: UserPosition, modifier: Modifier, onDismiss: () -> Unit) {
-    Card(
-        modifier  = modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
+    Card(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(8.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically,
-                modifier              = Modifier.fillMaxWidth()
-            ) {
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Text(user.fullName, style = MaterialTheme.typography.titleMedium)
                 TextButton(onClick = onDismiss, contentPadding = PaddingValues(0.dp)) {
-                    Text("✕", style = MaterialTheme.typography.bodyMedium)
+                    Text("✕")
                 }
             }
-            Text(
-                text  = roleLabel(user.role),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Text(roleLabel(user.role), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(4.dp))
-            Text(
-                text  = "Última posición: ${relativeTime(user.capturedAt)}",
+            Text("Última posición: ${relativeTime(user.capturedAt)}",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             user.activeAlert?.let {
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text  = "⚠ $it",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Text("⚠ $it", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error)
             }
             user.assignedBlock?.let {
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    text  = "Manzana: $it",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text("Manzana: $it", style = MaterialTheme.typography.bodySmall)
             }
         }
     }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Builders ─────────────────────────────────────────────────────────────────
 
 private class MapHolder { var map: MapLibreMap? = null }
 
@@ -189,12 +193,27 @@ private fun buildFeatureCollection(positions: List<UserPosition>): FeatureCollec
     return FeatureCollection.fromFeatures(features)
 }
 
+private fun buildZonesCollection(zonas: List<ZonaDto>): FeatureCollection {
+    val features = zonas.mapNotNull { zona ->
+        runCatching {
+            // zona.geojson.toString() → cadena JSON del Polygon geometry
+            val geomStr = zona.geojson.toString()
+            val nombre  = zona.nombre.replace("\\", "\\\\").replace("\"", "\\\"")
+            val json    = """{"type":"Feature","geometry":$geomStr,"properties":{"nombre":"$nombre","color":"${zona.color}"}}"""
+            Feature.fromJson(json)
+        }.getOrNull()
+    }
+    return FeatureCollection.fromFeatures(features)
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 private fun roleColor(role: String) = when (role) {
     "nebulizador"  -> "#2ecc71"
     "jefe_brigada" -> "#3498db"
     "anotador"     -> "#9b59b6"
     "chofer"       -> "#f39c12"
-    else           -> "#e74c3c"   // yo / desconocido
+    else           -> "#e74c3c"
 }
 
 private fun roleLabel(role: String) = when (role) {
@@ -208,24 +227,19 @@ private fun roleLabel(role: String) = when (role) {
 private fun relativeTime(capturedAt: Long): String {
     val diff = System.currentTimeMillis() - capturedAt
     return when {
-        diff < 60_000     -> "hace ${diff / 1_000} s"
-        diff < 3_600_000  -> "hace ${diff / 60_000} min"
-        else              -> {
-            val h = diff / 3_600_000
-            "hace ${h}h"
-        }
+        diff < 60_000    -> "hace ${diff / 1_000} s"
+        diff < 3_600_000 -> "hace ${diff / 60_000} min"
+        else             -> "hace ${diff / 3_600_000}h"
     }
 }
 
-// ─── Map style ───────────────────────────────────────────────────────────────
+// ─── Map style ────────────────────────────────────────────────────────────────
 
 private fun buildStyleJson(tileServerPort: Int?): String {
     if (tileServerPort == null) {
-        // Fallback when no PMTiles available: plain background
         return """{"version":8,"sources":{},"layers":[{"id":"bg","type":"background","paint":{"background-color":"#f5f0e8"}}]}"""
     }
-    val tilesUrl = "pmtiles://http://localhost:$tileServerPort/tiles.pmtiles"
-    return omtStyle(tilesUrl)
+    return omtStyle("pmtiles://http://localhost:$tileServerPort/tiles.pmtiles")
 }
 
 private fun omtStyle(tilesUrl: String) = """

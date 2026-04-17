@@ -1,6 +1,8 @@
 package com.redsalud.seggpsnebul.screens.map
 
 import com.redsalud.seggpsnebul.AppContainer
+import com.redsalud.seggpsnebul.data.remote.ZonaDto
+import com.redsalud.seggpsnebul.data.remote.ZonasRepository
 import com.redsalud.seggpsnebul.domain.model.User
 import com.redsalud.seggpsnebul.map.PmTilesManager
 import kotlinx.coroutines.*
@@ -14,7 +16,8 @@ sealed interface PmTilesState {
 }
 
 class MapViewModel(private val currentUser: User?) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope        = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val zonasRepo    = ZonasRepository()
 
     private val _pmTilesState = MutableStateFlow<PmTilesState>(
         if (PmTilesManager.isDownloaded()) PmTilesState.Ready else PmTilesState.NotDownloaded
@@ -29,11 +32,13 @@ class MapViewModel(private val currentUser: User?) {
     private val _myPosition = MutableStateFlow<UserPosition?>(null)
     val myPosition: StateFlow<UserPosition?> = _myPosition.asStateFlow()
 
+    private val _zonas = MutableStateFlow<List<ZonaDto>>(emptyList())
+    val zonas: StateFlow<List<ZonaDto>> = _zonas.asStateFlow()
+
     init {
-        if (_pmTilesState.value == PmTilesState.NotDownloaded) {
-            downloadPmTiles()
-        }
+        if (_pmTilesState.value == PmTilesState.NotDownloaded) downloadPmTiles()
         pollPositions()
+        loadZonas()
     }
 
     fun downloadPmTiles() {
@@ -46,6 +51,14 @@ class MapViewModel(private val currentUser: User?) {
             }.onFailure { e ->
                 _pmTilesState.value = PmTilesState.Error(e.message ?: "Error desconocido")
             }
+        }
+    }
+
+    private fun loadZonas() {
+        scope.launch {
+            zonasRepo.fetchZonas()
+                .onSuccess { _zonas.value = it }
+            // Si falla (sin red), mostramos mapa sin zonas — no es crítico
         }
     }
 
@@ -67,16 +80,11 @@ class MapViewModel(private val currentUser: User?) {
             val latest = tracks.maxByOrNull { it.captured_at } ?: continue
             val pos = UserPosition(user.id, user.fullName, user.role.value,
                 latest.latitude, latest.longitude, latest.captured_at)
-            if (user.id == currentUser?.id) {
-                _myPosition.value = pos
-            } else {
-                positions.add(pos)
-            }
+            if (user.id == currentUser?.id) _myPosition.value = pos
+            else positions.add(pos)
         }
         _userPositions.value = positions
     }
 
-    fun dispose() {
-        scope.cancel()
-    }
+    fun dispose() { scope.cancel() }
 }
