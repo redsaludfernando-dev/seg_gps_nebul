@@ -1,17 +1,21 @@
 [versions]
-agp = "8.5.2"
-kotlin = "2.0.21"
+agp = "8.9.1"
+kotlin = "2.1.20"
 compose-multiplatform = "1.7.0"
 android-minSdk = "24"
-android-compileSdk = "34"
-android-targetSdk = "34"
+android-compileSdk = "35"
+android-targetSdk = "35"
 androidx-activityCompose = "1.9.2"
+play-services-location = "21.3.0"
+maplibre-android = "11.8.0"
+compose-webview = "1.9.40"
 androidx-core-ktx = "1.13.1"
 coroutines = "1.8.1"
-ktor = "2.3.12"
-sqldelight = "2.0.2"
-supabase = "2.5.4"
+ktor = "3.4.0"
+sqldelight = "2.3.2"
+supabase = "3.4.1"
 kotlinx-serialization = "1.7.3"
+kotlinx-datetime = "0.6.1"
 
 [libraries]
 # AndroidX
@@ -22,23 +26,34 @@ androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 
 # Serialization
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 
 # Ktor (requerido por Supabase SDK)
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
 ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
+ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 
-# Supabase
-supabase-gotrue = { module = "io.github.jan-tennermann:gotrue-kt", version.ref = "supabase" }
-supabase-postgrest = { module = "io.github.jan-tennermann:postgrest-kt", version.ref = "supabase" }
-supabase-realtime = { module = "io.github.jan-tennermann:realtime-kt", version.ref = "supabase" }
-supabase-storage = { module = "io.github.jan-tennermann:storage-kt", version.ref = "supabase" }
+# Supabase (grupo correcto: io.github.jan-tennert.supabase, gotrue→auth en v3)
+supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt", version.ref = "supabase" }
+supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt", version.ref = "supabase" }
+supabase-realtime = { module = "io.github.jan-tennert.supabase:realtime-kt", version.ref = "supabase" }
+supabase-storage = { module = "io.github.jan-tennert.supabase:storage-kt", version.ref = "supabase" }
+
+# GPS / Maps / WebView
+play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "play-services-location" }
+maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre-android" }
+compose-webview = { module = "io.github.kevinnzou:compose-webview-multiplatform", version.ref = "compose-webview" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 
 # SQLDelight
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
