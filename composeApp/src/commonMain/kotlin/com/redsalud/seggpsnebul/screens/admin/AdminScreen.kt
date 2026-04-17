@@ -65,7 +65,7 @@ fun AdminScreen(onLogout: () -> Unit) {
                 }
             }
             when (tab) {
-                AdminTab.MAPA         -> MapaTab(vm)
+                AdminTab.MAPA         -> MapaTab(vm, onBack = { tab = AdminTab.TRABAJADORES })
                 AdminTab.TRABAJADORES -> TrabajadoresTab(vm)
                 AdminTab.JORNADAS     -> JornadasTab(vm)
                 AdminTab.ZONAS        -> ZonasTab(vm)

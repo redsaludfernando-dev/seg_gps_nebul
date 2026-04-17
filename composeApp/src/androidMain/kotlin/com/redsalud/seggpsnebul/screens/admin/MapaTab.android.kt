@@ -7,8 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
-// El geovisor admin es exclusivo del panel web.
-actual @Composable fun MapaTab(vm: AdminViewModel) {
+actual @Composable fun MapaTab(vm: AdminViewModel, onBack: () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Geovisor disponible en el panel web.")
     }
