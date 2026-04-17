@@ -13,7 +13,7 @@ import com.redsalud.seggpsnebul.data.remote.UserAdminDto
 import com.redsalud.seggpsnebul.screens.role.SyncStatusIndicator
 import kotlinx.datetime.Instant
 
-private enum class AdminTab { TRABAJADORES, JORNADAS, SYNC }
+private enum class AdminTab { TRABAJADORES, JORNADAS, ZONAS, SYNC }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +56,7 @@ fun AdminScreen(onLogout: () -> Unit) {
                             Text(when (t) {
                                 AdminTab.TRABAJADORES -> "Trabajadores"
                                 AdminTab.JORNADAS     -> "Jornadas"
+                                AdminTab.ZONAS        -> "Manzanas"
                                 AdminTab.SYNC         -> "Sync"
                             })
                         }
@@ -65,6 +66,7 @@ fun AdminScreen(onLogout: () -> Unit) {
             when (tab) {
                 AdminTab.TRABAJADORES -> TrabajadoresTab(vm)
                 AdminTab.JORNADAS     -> JornadasTab(vm)
+                AdminTab.ZONAS        -> ZonasTab(vm)
                 AdminTab.SYNC         -> SyncTab(vm)
             }
         }

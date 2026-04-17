@@ -15,20 +15,18 @@ fun MapScreen(user: User?, onLogout: () -> Unit) {
     val vm = remember(user) { MapViewModel(user) }
     DisposableEffect(vm) { onDispose { vm.dispose() } }
 
-    val pmState by vm.pmTilesState.collectAsState()
+    val pmState       by vm.pmTilesState.collectAsState()
     val userPositions by vm.userPositions.collectAsState()
-    val myPosition by vm.myPosition.collectAsState()
-    val isOnline by vm.isOnline.collectAsState()
+    val myPosition    by vm.myPosition.collectAsState()
+    val isOnline      by vm.isOnline.collectAsState()
+    val zonas         by vm.zonas.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(user?.fullName ?: "Administrador") },
+                title = { Text(user?.fullName ?: "Mapa") },
                 actions = {
-                    if (!isOnline) {
-                        Badge { Text("Sin conexion") }
-                        Spacer(Modifier.width(8.dp))
-                    }
+                    if (!isOnline) { Badge { Text("Sin conexion") }; Spacer(Modifier.width(8.dp)) }
                     TextButton(onClick = onLogout) { Text("Salir") }
                 }
             )
@@ -41,13 +39,15 @@ fun MapScreen(user: User?, onLogout: () -> Unit) {
                 is PmTilesState.Error         -> ErrorCard(s.msg, vm)
                 is PmTilesState.Ready -> {
                     MapLibreView(
-                        modifier = Modifier.fillMaxSize(),
-                        pmtilesPath = PmTilesManager.localPath(),
+                        modifier      = Modifier.fillMaxSize(),
+                        pmtilesPath   = PmTilesManager.localPath(),
                         userPositions = userPositions,
-                        myPosition = myPosition
+                        myPosition    = myPosition,
+                        zonas         = zonas
                     )
                     if (userPositions.isNotEmpty()) {
-                        UserCountBadge(userPositions.size, Modifier.align(Alignment.BottomEnd).padding(16.dp))
+                        UserCountBadge(userPositions.size,
+                            Modifier.align(Alignment.BottomEnd).padding(16.dp))
                     }
                 }
             }
@@ -57,11 +57,7 @@ fun MapScreen(user: User?, onLogout: () -> Unit) {
 
 @Composable
 private fun DownloadPrompt(vm: MapViewModel) {
-    Column(
-        Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
+    Column(Modifier.fillMaxSize(), Arrangement.Center, Alignment.CenterHorizontally) {
         Text("Mapa de Rioja no descargado", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         Button(onClick = { vm.downloadPmTiles() }) { Text("Descargar mapa (~50 MB)") }
@@ -70,11 +66,7 @@ private fun DownloadPrompt(vm: MapViewModel) {
 
 @Composable
 private fun DownloadProgress(progress: Float) {
-    Column(
-        Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
+    Column(Modifier.fillMaxSize(), Arrangement.Center, Alignment.CenterHorizontally) {
         Text("Descargando mapa...", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         if (progress > 0f) LinearProgressIndicator(progress = { progress }, Modifier.width(200.dp))
@@ -84,11 +76,7 @@ private fun DownloadProgress(progress: Float) {
 
 @Composable
 private fun ErrorCard(msg: String, vm: MapViewModel) {
-    Column(
-        Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
+    Column(Modifier.fillMaxSize(), Arrangement.Center, Alignment.CenterHorizontally) {
         Text("Error: $msg", color = MaterialTheme.colorScheme.error)
         Spacer(Modifier.height(16.dp))
         OutlinedButton(onClick = { vm.downloadPmTiles() }) { Text("Reintentar") }

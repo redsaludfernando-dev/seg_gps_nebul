@@ -6,6 +6,8 @@ import com.redsalud.seggpsnebul.data.remote.CsvExporter
 import com.redsalud.seggpsnebul.data.remote.SessionAdminDto
 import com.redsalud.seggpsnebul.data.remote.SessionStats
 import com.redsalud.seggpsnebul.data.remote.UserAdminDto
+import com.redsalud.seggpsnebul.data.remote.ZonaDto
+import com.redsalud.seggpsnebul.data.remote.ZonasRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -13,6 +15,7 @@ class AdminViewModel {
     private val scope         = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val adminRepo     = AdminRepository()
     private val csvExporter   = CsvExporter()
+    private val zonasRepo     = ZonasRepository()
 
     // ── Data lists ────────────────────────────────────────────────────────────
     private val _sessions = MutableStateFlow<List<SessionAdminDto>>(emptyList())
@@ -43,7 +46,11 @@ class AdminViewModel {
     val lastSyncAt    = MutableStateFlow<Long?>(null)
     val syncLastError = MutableStateFlow<String?>(null)
 
-    init { loadAll() }
+    // ── Zonas ─────────────────────────────────────────────────────────────────
+    private val _zonas = MutableStateFlow<List<ZonaDto>>(emptyList())
+    val zonas: StateFlow<List<ZonaDto>> = _zonas.asStateFlow()
+
+    init { loadAll(); loadZonas() }
 
     fun loadAll() {
         scope.launch {
@@ -98,9 +105,40 @@ class AdminViewModel {
         }
     }
 
-    fun triggerSync() { /* no-op: admin trabaja solo con datos de Supabase */ }
+    fun triggerSync() { /* no-op */ }
 
     fun clearMessage() { _message.value = null }
+
+    // ── Zonas ─────────────────────────────────────────────────────────────────
+
+    fun loadZonas() {
+        scope.launch {
+            zonasRepo.fetchZonas()
+                .onSuccess { _zonas.value = it }
+                .onFailure { _message.value = "Error cargando zonas: ${it.message}" }
+        }
+    }
+
+    fun uploadZonas(list: List<ZonaDto>) {
+        scope.launch {
+            _isLoading.value = true
+            zonasRepo.deleteAllZonas()
+                .mapCatching { zonasRepo.upsertZonas(list).getOrThrow() }
+                .onSuccess { _message.value = "${list.size} manzanas publicadas"; loadZonas() }
+                .onFailure { _message.value = "Error publicando zonas: ${it.message}" }
+            _isLoading.value = false
+        }
+    }
+
+    fun deleteAllZonas() {
+        scope.launch {
+            _isLoading.value = true
+            zonasRepo.deleteAllZonas()
+                .onSuccess { _zonas.value = emptyList(); _message.value = "Manzanas eliminadas" }
+                .onFailure { _message.value = "Error: ${it.message}" }
+            _isLoading.value = false
+        }
+    }
 
     fun dispose() { scope.cancel() }
 
