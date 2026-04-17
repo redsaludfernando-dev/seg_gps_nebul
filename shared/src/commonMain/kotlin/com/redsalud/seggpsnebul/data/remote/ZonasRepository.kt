@@ -16,7 +16,8 @@ class ZonasRepository {
 
     suspend fun upsertZonas(zonas: List<ZonaDto>): Result<Unit> = withContext(Dispatchers.Default) {
         runCatching {
-            supabaseClient.postgrest["zonas"].upsert(zonas)
+            // defaultToNull = false: no enviar null para campos omitidos (respeta el DEFAULT de la BD)
+            supabaseClient.postgrest["zonas"].upsert(zonas) { defaultToNull = false }
             Unit
         }
     }

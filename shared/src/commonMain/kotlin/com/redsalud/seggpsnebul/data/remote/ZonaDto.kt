@@ -7,6 +7,6 @@ import kotlinx.serialization.json.JsonElement
 data class ZonaDto(
     val id: String,
     val nombre: String,
-    val color: String = "#e74c3c",
+    val color: String,  // siempre explícito — sin default para evitar que kotlinx.serialization lo omita
     val geojson: JsonElement   // GeoJSON Polygon geometry (almacenado como JSONB en Supabase)
 )
