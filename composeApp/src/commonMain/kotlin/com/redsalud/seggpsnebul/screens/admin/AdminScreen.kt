@@ -13,7 +13,7 @@ import com.redsalud.seggpsnebul.data.remote.UserAdminDto
 import com.redsalud.seggpsnebul.screens.role.SyncStatusIndicator
 import kotlinx.datetime.Instant
 
-private enum class AdminTab { TRABAJADORES, JORNADAS, ZONAS, SYNC }
+private enum class AdminTab { MAPA, TRABAJADORES, JORNADAS, ZONAS, SYNC }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -21,7 +21,7 @@ fun AdminScreen(onLogout: () -> Unit) {
     val vm = remember { AdminViewModel() }
     DisposableEffect(Unit) { onDispose { vm.dispose() } }
 
-    var tab by remember { mutableStateOf(AdminTab.TRABAJADORES) }
+    var tab by remember { mutableStateOf(AdminTab.MAPA) }
 
     val isLoading by vm.isLoading.collectAsState()
     val message   by vm.message.collectAsState()
@@ -54,6 +54,7 @@ fun AdminScreen(onLogout: () -> Unit) {
                         onClick  = { tab = t },
                         text     = {
                             Text(when (t) {
+                                AdminTab.MAPA         -> "Mapa"
                                 AdminTab.TRABAJADORES -> "Trabajadores"
                                 AdminTab.JORNADAS     -> "Jornadas"
                                 AdminTab.ZONAS        -> "Manzanas"
@@ -64,6 +65,7 @@ fun AdminScreen(onLogout: () -> Unit) {
                 }
             }
             when (tab) {
+                AdminTab.MAPA         -> MapaTab(vm)
                 AdminTab.TRABAJADORES -> TrabajadoresTab(vm)
                 AdminTab.JORNADAS     -> JornadasTab(vm)
                 AdminTab.ZONAS        -> ZonasTab(vm)
