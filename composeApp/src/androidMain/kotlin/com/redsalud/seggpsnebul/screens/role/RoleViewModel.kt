@@ -1,0 +1,242 @@
+package com.redsalud.seggpsnebul.screens.role
+
+import com.redsalud.seggpsnebul.AppContainer
+import com.redsalud.seggpsnebul.data.local.Alerts
+import com.redsalud.seggpsnebul.data.local.Block_assignments
+import com.redsalud.seggpsnebul.domain.model.AlertType
+import com.redsalud.seggpsnebul.domain.model.User
+import com.redsalud.seggpsnebul.map.PmTilesManager
+import com.redsalud.seggpsnebul.screens.map.PmTilesState
+import com.redsalud.seggpsnebul.screens.map.UserPosition
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+
+@OptIn(ExperimentalTime::class)
+class RoleViewModel(val currentUser: User) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // ── PMTiles ──────────────────────────────────────────────────────────────
+    private val _pmTilesState = MutableStateFlow<PmTilesState>(
+        if (PmTilesManager.isDownloaded()) PmTilesState.Ready else PmTilesState.NotDownloaded
+    )
+    val pmTilesState: StateFlow<PmTilesState> = _pmTilesState.asStateFlow()
+
+    // ── Connectivity ─────────────────────────────────────────────────────────
+    val isOnline: StateFlow<Boolean> = AppContainer.connectivityObserver.isOnline
+
+    // ── Session ───────────────────────────────────────────────────────────────
+    private val _sessionActive = MutableStateFlow(
+        AppContainer.localDataSource.getActiveSession() != null
+    )
+    val sessionActive: StateFlow<Boolean> = _sessionActive.asStateFlow()
+
+    private val _sessionId = MutableStateFlow(
+        AppContainer.localDataSource.getActiveSession()?.id
+    )
+    val sessionId: StateFlow<String?> = _sessionId.asStateFlow()
+
+    // ── Alerts ────────────────────────────────────────────────────────────────
+    private val _pendingAlerts = MutableStateFlow<List<Alerts>>(emptyList())
+    val pendingAlerts: StateFlow<List<Alerts>> = _pendingAlerts.asStateFlow()
+
+    private val _allAlerts = MutableStateFlow<List<Alerts>>(emptyList())
+    val allAlerts: StateFlow<List<Alerts>> = _allAlerts.asStateFlow()
+
+    // ── Block assignments ─────────────────────────────────────────────────────
+    private val _myBlock = MutableStateFlow<Block_assignments?>(null)
+    val myBlock: StateFlow<Block_assignments?> = _myBlock.asStateFlow()
+
+    private val _allBlocks = MutableStateFlow<List<Block_assignments>>(emptyList())
+    val allBlocks: StateFlow<List<Block_assignments>> = _allBlocks.asStateFlow()
+
+    // ── Map positions ─────────────────────────────────────────────────────────
+    private val _userPositions = MutableStateFlow<List<UserPosition>>(emptyList())
+    val userPositions: StateFlow<List<UserPosition>> = _userPositions.asStateFlow()
+
+    private val _myPosition = MutableStateFlow<UserPosition?>(null)
+    val myPosition: StateFlow<UserPosition?> = _myPosition.asStateFlow()
+
+    // ── Snackbar messages ─────────────────────────────────────────────────────
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    init {
+        if (_pmTilesState.value == PmTilesState.NotDownloaded) downloadPmTiles()
+        // Publish existing session to AppContainer so Realtime can subscribe
+        _sessionId.value?.let { sid ->
+            AppContainer.currentSessionId.value = sid
+            if (AppContainer.connectivityObserver.isOnline.value) {
+                AppContainer.realtimeRepository.subscribeToSession(sid)
+            }
+        }
+        pollData()
+        subscribeToRealtimeAlerts()
+    }
+
+    // ── Session control ───────────────────────────────────────────────────────
+
+    fun startSession(name: String) {
+        val sessionId = UUID.randomUUID().toString()
+        AppContainer.localDataSource.insertSession(
+            id          = sessionId,
+            name        = name,
+            brigadeCode = null,
+            startedBy   = currentUser.id,
+            startedAt   = Clock.System.now().toEpochMilliseconds()
+        )
+        _sessionId.value = sessionId
+        _sessionActive.value = true
+        AppContainer.currentSessionId.value = sessionId
+        if (AppContainer.connectivityObserver.isOnline.value) {
+            AppContainer.realtimeRepository.subscribeToSession(sessionId)
+        }
+        _message.value = "Jornada iniciada"
+        refresh()
+    }
+
+    fun endSession() {
+        val sid = _sessionId.value ?: return
+        AppContainer.localDataSource.closeSession(sid, Clock.System.now().toEpochMilliseconds())
+        _sessionActive.value = false
+        AppContainer.currentSessionId.value = null
+        AppContainer.realtimeRepository.unsubscribeAll()
+        _message.value = "Jornada finalizada"
+        refresh()
+    }
+
+    // ── Alerts ────────────────────────────────────────────────────────────────
+
+    fun sendAlert(type: AlertType, message: String? = null, lat: Double? = null, lon: Double? = null) {
+        val sid = _sessionId.value ?: run {
+            _message.value = "No hay jornada activa"
+            return
+        }
+        AppContainer.localDataSource.insertAlert(
+            id         = UUID.randomUUID().toString(),
+            senderId   = currentUser.id,
+            sessionId  = sid,
+            alertType  = type.value,
+            message    = message,
+            targetRole = type.targetRole,
+            latitude   = lat,
+            longitude  = lon,
+            createdAt  = Clock.System.now().toEpochMilliseconds()
+        )
+        _message.value = "Alerta enviada: ${type.label}"
+        AppContainer.syncManager.refreshCounts()
+        refresh()
+    }
+
+    fun markAlertAttended(alertId: String) {
+        AppContainer.localDataSource.markAlertAttended(alertId, currentUser.id)
+        refresh()
+    }
+
+    // ── Block assignments ─────────────────────────────────────────────────────
+
+    fun assignBlock(assignedTo: String, blockName: String, notes: String? = null) {
+        val sid = _sessionId.value ?: run {
+            _message.value = "No hay jornada activa"
+            return
+        }
+        AppContainer.localDataSource.insertBlockAssignment(
+            id         = UUID.randomUUID().toString(),
+            sessionId  = sid,
+            assignedTo = assignedTo,
+            assignedBy = currentUser.id,
+            blockName  = blockName,
+            notes      = notes,
+            assignedAt = Clock.System.now().toEpochMilliseconds()
+        )
+        _message.value = "Manzana asignada: $blockName"
+        refresh()
+    }
+
+    // ── PMTiles ───────────────────────────────────────────────────────────────
+
+    fun downloadPmTiles() {
+        scope.launch {
+            _pmTilesState.value = PmTilesState.Downloading(0f)
+            PmTilesManager.download { progress ->
+                _pmTilesState.value = PmTilesState.Downloading(progress)
+            }.onSuccess {
+                _pmTilesState.value = PmTilesState.Ready
+            }.onFailure { e ->
+                _pmTilesState.value = PmTilesState.Error(e.message ?: "Error desconocido")
+            }
+        }
+    }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
+
+    private fun pollData() {
+        scope.launch {
+            while (isActive) {
+                refresh()
+                // Poll faster when Realtime is down so alerts aren't missed
+                val realtimeUp = AppContainer.realtimeRepository.isConnected.value
+                delay(if (realtimeUp) 10_000L else 5_000L)
+            }
+        }
+    }
+
+    /** Instant refresh when Supabase Realtime pushes a new alert for this session. */
+    private fun subscribeToRealtimeAlerts() {
+        scope.launch {
+            AppContainer.realtimeRepository.newAlerts.collect { event ->
+                if (event.sessionId == _sessionId.value) {
+                    refresh()
+                }
+            }
+        }
+    }
+
+    fun refresh() {
+        val sid = _sessionId.value ?: AppContainer.localDataSource.getActiveSession()?.id
+        if (sid == null) {
+            _pendingAlerts.value = emptyList()
+            _allAlerts.value     = emptyList()
+            _allBlocks.value     = emptyList()
+            _myBlock.value       = null
+            _userPositions.value = emptyList()
+            return
+        }
+        _sessionId.value = sid
+
+        _pendingAlerts.value = AppContainer.localDataSource.getUnattendedAlertsBySession(sid)
+        _allAlerts.value     = AppContainer.localDataSource.getAlertsBySession(sid)
+        _allBlocks.value     = AppContainer.localDataSource.getBlockAssignmentsBySession(sid)
+        _myBlock.value       = AppContainer.localDataSource.getMyBlockAssignment(sid, currentUser.id)
+
+        val allUsers = AppContainer.localDataSource.getAllActiveUsers()
+        val positions = mutableListOf<UserPosition>()
+        val blockMap  = _allBlocks.value.associateBy { it.assigned_to }
+        val alertMap  = _pendingAlerts.value.groupBy { it.sender_id }
+
+        for (u in allUsers) {
+            val tracks = AppContainer.localDataSource.getGpsTracksByUserSession(u.id, sid)
+            val latest = tracks.maxByOrNull { it.captured_at } ?: continue
+            val latestAlert = alertMap[u.id]?.maxByOrNull { it.created_at }
+            val pos = UserPosition(
+                userId        = u.id,
+                fullName      = u.fullName,
+                role          = u.role.value,
+                latitude      = latest.latitude,
+                longitude     = latest.longitude,
+                capturedAt    = latest.captured_at,
+                activeAlert   = latestAlert?.alert_type,
+                assignedBlock = blockMap[u.id]?.block_name
+            )
+            if (u.id == currentUser.id) _myPosition.value = pos
+            else positions.add(pos)
+        }
+        _userPositions.value = positions
+    }
+
+    fun clearMessage() { _message.value = null }
+
+    fun dispose() { scope.cancel() }
+}

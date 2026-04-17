@@ -1,5 +1,3 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidApplication)
@@ -9,22 +7,33 @@ plugins {
 
 kotlin {
     androidTarget {
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "17"
-            }
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
 
-    jvm("desktop")
+    wasmJs {
+        browser {
+            commonWebpackConfig {
+                outputFileName = "app.js"
+            }
+        }
+        binaries.executable()
+    }
 
     sourceSets {
-        val desktopMain by getting
+        val wasmJsMain by getting
 
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.core.ktx)
             implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.play.services.location)
+            implementation(libs.maplibre.android)
+            // Servidor local de tiles PMTiles (mapas offline)
+            implementation(libs.ktor.server.cio)
+            implementation(libs.ktor.server.core)
+            implementation(libs.ktor.server.cors)
         }
 
         commonMain.dependencies {
@@ -34,14 +43,19 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
+            implementation(libs.kotlinx.datetime)
             implementation(projects.shared)
         }
 
-        desktopMain.dependencies {
-            implementation(compose.desktop.currentOs)
-            implementation(libs.kotlinx.coroutines.swing)
+        wasmJsMain.dependencies {
+            // Engine HTTP ya viene transitivo desde shared → ktor-client-js
         }
     }
+}
+
+// Forzar browser a versión compatible con compileSdk 35
+configurations.all {
+    resolutionStrategy.force("androidx.browser:browser:1.8.0")
 }
 
 android {
@@ -60,26 +74,33 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile     = file(System.getenv("KEYSTORE_PATH") ?: "keystore/release.jks")
+            storePassword = System.getenv("KEYSTORE_PASS") ?: ""
+            keyAlias      = System.getenv("KEY_ALIAS")     ?: "seggps"
+            keyPassword   = System.getenv("KEY_PASS")      ?: ""
+        }
+    }
+
     buildTypes {
+        debug {
+            ndk { abiFilters += listOf("x86_64", "arm64-v8a") }
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled   = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-}
-
-compose.desktop {
-    application {
-        mainClass = "com.redsalud.seggpsnebul.MainKt"
-
-        nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Exe)
-            packageName = "GPS Nebulizacion"
-            packageVersion = "1.0.0"
-        }
     }
 }
