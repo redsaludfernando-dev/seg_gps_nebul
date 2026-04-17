@@ -7,47 +7,51 @@ plugins {
 
 kotlin {
     androidTarget {
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "17"
-            }
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
 
-    jvm("desktop")
+    wasmJs {
+        browser()
+    }
 
     sourceSets {
-        val desktopMain by getting
+        val wasmJsMain by getting
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
 
         commonMain.dependencies {
             // Coroutines
             implementation(libs.kotlinx.coroutines.core)
             // Serialization
             implementation(libs.kotlinx.serialization.json)
-            // Ktor
+            // DateTime
+            implementation(libs.kotlinx.datetime)
+            // Ktor (client core + plugins — engine is platform-specific)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.client.websockets)
             implementation(libs.ktor.client.logging)
             // Supabase
-            implementation(libs.supabase.gotrue)
+            implementation(libs.supabase.auth)
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.realtime)
             implementation(libs.supabase.storage)
-            // SQLDelight
-            implementation(libs.sqldelight.coroutines)
         }
 
         androidMain.dependencies {
             implementation(libs.ktor.client.android)
             implementation(libs.sqldelight.android.driver)
+            implementation(libs.sqldelight.coroutines)
             implementation(libs.kotlinx.coroutines.android)
         }
 
-        desktopMain.dependencies {
-            implementation(libs.ktor.client.java)
-            implementation(libs.sqldelight.sqlite.driver)
-            implementation(libs.kotlinx.coroutines.swing)
+        wasmJsMain.dependencies {
+            implementation(libs.ktor.client.js)
         }
     }
 }
@@ -68,6 +72,8 @@ sqldelight {
     databases {
         create("SegGpsDatabase") {
             packageName.set("com.redsalud.seggpsnebul.data.local")
+            // Genera solo para Android: sin SQLDelight en wasmJs
+            srcDirs.setFrom("src/androidMain/sqldelight")
         }
     }
 }

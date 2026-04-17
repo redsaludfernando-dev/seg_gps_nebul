@@ -10,3 +10,23 @@ google-services.json
 .DS_Store
 /composeApp/build/
 /shared/build/
+
+# Datos de cartografía y herramientas grandes (> 50 MB)
+scripts/data/
+scripts/*.jar
+scripts/*.zip
+scripts/*.exe
+scripts/*.pmtiles
+
+# Excepción: gradle wrapper (necesario para CI)
+!gradle/wrapper/gradle-wrapper.jar
+
+# APK release y mappings de CI
+composeApp/release/*.apk
+composeApp/release/baselineProfiles/
+
+# Logs del compilador Kotlin
+.kotlin/
+
+# JS sourcemaps de build
+**/*.js.map

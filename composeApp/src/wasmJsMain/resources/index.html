@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Panel Admin — GPS Nebulización Rioja</title>
+    <meta name="description" content="Panel administrativo para seguimiento GPS de brigadas de nebulización espacial, Provincia de Rioja."/>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { width: 100%; height: 100%; background: #FFFBFE; }
+        #loading {
+            position: fixed; inset: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 16px; font-family: sans-serif;
+            color: #49454F; background: #FFFBFE;
+        }
+        #loading-spinner {
+            width: 40px; height: 40px; border-radius: 50%;
+            border: 3px solid #E6E0E9;
+            border-top-color: #6750A4;
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loading-text { font-size: 14px; letter-spacing: 0.1px; }
+    </style>
+
+    <!-- Service worker para headers COOP/COEP en GitHub Pages -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./coi-serviceworker.js')
+                .then(function(reg) {
+                    // Si acaba de instalarse, recarga para activar headers
+                    if (!navigator.serviceWorker.controller) {
+                        window.location.reload();
+                    }
+                })
+                .catch(function(err) {
+                    console.warn('Service Worker no disponible:', err);
+                });
+        }
+    </script>
+</head>
+<body>
+    <div id="loading">
+        <div id="loading-spinner"></div>
+        <div id="loading-text">Cargando panel admin…</div>
+    </div>
+    <canvas id="ComposeTarget"></canvas>
+    <script src="app.js"></script>
+    <script>
+        // Oculta spinner cuando Compose está listo
+        document.addEventListener('DOMContentLoaded', function() {
+            var canvas = document.getElementById('ComposeTarget');
+            if (canvas) {
+                var obs = new MutationObserver(function() {
+                    var loader = document.getElementById('loading');
+                    if (loader) loader.style.display = 'none';
+                    obs.disconnect();
+                });
+                obs.observe(canvas, { attributes: true, childList: true });
+                // Fallback: quitar spinner después de 5 s
+                setTimeout(function() {
+                    var loader = document.getElementById('loading');
+                    if (loader) loader.style.display = 'none';
+                }, 5000);
+            }
+        });
+    </script>
+</body>
+</html>
