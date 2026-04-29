@@ -1,0 +1,30 @@
+name: Supabase keep-alive
+
+# Pinga la API REST de Supabase cada día para evitar la pausa
+# automática del proyecto en el plan free tras 7 días sin actividad.
+# Cron: 06:00 UTC ≈ 01:00 hora Perú.
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping REST /users
+        env:
+          SUPABASE_URL: https://mltudqhjsqmnospewgxa.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1sdHVkcWhqc3Ftbm9zcGV3Z3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDE2MzgsImV4cCI6MjA5MDI3NzYzOH0.P0WWVfs78hR5Sh6bOHOwN1LWFCdB2T63ySJMu6gfW1c
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Range: 0-0" \
+            "$SUPABASE_URL/rest/v1/users?select=id&limit=1" \
+            -o /dev/null
+          echo "keep-alive ok @ $(date -u +%FT%TZ)"

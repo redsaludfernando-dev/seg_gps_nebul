@@ -1,5 +1,6 @@
 package com.redsalud.seggpsnebul.screens.admin
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -142,28 +143,119 @@ fun ZonasTab(vm: AdminViewModel) {
         }
 
         items(zonas, key = { it.id }) { zona ->
-            ZonaCard(zona)
+            ZonaCard(
+                zona     = zona,
+                onEdit   = { newName, newColor -> vm.updateZona(zona.id, newName, newColor) },
+                onDelete = { vm.deleteZona(zona.id) }
+            )
         }
     }
 }
 
 @Composable
-private fun ZonaCard(zona: ZonaDto) {
+private fun ZonaCard(
+    zona: ZonaDto,
+    onEdit: (nombre: String, color: String) -> Unit,
+    onDelete: () -> Unit
+) {
+    var editing  by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+
     Card(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Indicador de color
             Surface(
                 modifier = Modifier.size(14.dp),
                 shape    = MaterialTheme.shapes.small,
                 color    = parseColor(zona.color)
             ) {}
             Text(zona.nombre, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { editing = true }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("Editar", style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(
+                onClick = { deleting = true },
+                colors  = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) { Text("Borrar", style = MaterialTheme.typography.labelSmall) }
         }
     }
+
+    if (editing) {
+        EditZonaDialog(
+            initialName  = zona.nombre,
+            initialColor = zona.color,
+            onDismiss    = { editing = false },
+            onSubmit     = { name, color -> onEdit(name, color); editing = false }
+        )
+    }
+    if (deleting) {
+        AlertDialog(
+            onDismissRequest = { deleting = false },
+            title = { Text("Eliminar manzana") },
+            text  = { Text("¿Eliminar la manzana '${zona.nombre}'?") },
+            confirmButton = {
+                TextButton(
+                    onClick = { onDelete(); deleting = false },
+                    colors  = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Eliminar") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancelar") } }
+        )
+    }
+}
+
+@Composable
+private fun EditZonaDialog(
+    initialName: String,
+    initialColor: String,
+    onDismiss: () -> Unit,
+    onSubmit: (nombre: String, color: String) -> Unit
+) {
+    var name  by remember { mutableStateOf(initialName) }
+    var color by remember { mutableStateOf(initialColor) }
+
+    val palette = listOf(
+        "#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c",
+        "#3498db", "#9b59b6", "#34495e", "#7f8c8d", "#000000"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Editar manzana") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value         = name,
+                    onValueChange = { name = it },
+                    label         = { Text("Nombre") },
+                    singleLine    = true
+                )
+                Text("Color", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    palette.forEach { c ->
+                        Surface(
+                            modifier = Modifier.size(28.dp),
+                            shape    = MaterialTheme.shapes.small,
+                            color    = parseColor(c),
+                            border   = if (c == color) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
+                            onClick  = { color = c }
+                        ) {}
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(name, color) },
+                enabled = name.isNotBlank()
+            ) { Text("Guardar") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
 }
 
 /** Convierte un hex string a un Color de Compose. */
