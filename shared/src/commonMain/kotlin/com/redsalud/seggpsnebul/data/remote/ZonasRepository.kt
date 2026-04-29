@@ -32,4 +32,25 @@ class ZonasRepository {
             Unit
         }
     }
+
+    /** Elimina una manzana concreta. */
+    suspend fun deleteZona(id: String): Result<Unit> = withContext(Dispatchers.Default) {
+        runCatching {
+            supabaseClient.postgrest["zonas"]
+                .delete { filter { eq("id", id) } }
+            Unit
+        }
+    }
+
+    /** Renombra y/o cambia el color de una manzana sin tocar su geometría. */
+    suspend fun updateZona(id: String, nombre: String, color: String): Result<Unit> =
+        withContext(Dispatchers.Default) {
+            runCatching {
+                supabaseClient.postgrest["zonas"].update({
+                    set("nombre", nombre.trim())
+                    set("color", color)
+                }) { filter { eq("id", id) } }
+                Unit
+            }
+        }
 }

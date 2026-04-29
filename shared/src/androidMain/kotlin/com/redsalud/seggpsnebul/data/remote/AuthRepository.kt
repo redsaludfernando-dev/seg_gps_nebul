@@ -15,13 +15,13 @@ import kotlin.time.ExperimentalTime
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
-@Serializable
-private data class AllowedUserDto(
-    val dni: String,
-    @SerialName("phone_number") val phoneNumber: String
-)
-
 class AuthRepository(private val local: LocalDataSource) {
+
+    @Serializable
+    private data class AllowedRow(
+        val dni: String,
+        @SerialName("phone_number") val phoneNumber: String
+    )
 
     suspend fun loginWorker(dni: String, pin: String): AuthResult {
         val user = local.getUserByDni(dni)
@@ -74,7 +74,7 @@ class AuthRepository(private val local: LocalDataSource) {
         return try {
             val rows = supabaseClient.postgrest["allowed_users"]
                 .select { filter { eq("dni", dni) } }
-                .decodeList<AllowedUserDto>()
+                .decodeList<AllowedRow>()
             rows.firstOrNull()?.phoneNumber
         } catch (_: Exception) {
             null
