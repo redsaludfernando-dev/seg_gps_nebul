@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,7 +29,10 @@ fun JornadasTab(vm: AdminViewModel) {
             verticalAlignment     = Alignment.CenterVertically
         ) {
             Text("${sessions.size} jornadas", style = MaterialTheme.typography.labelMedium)
-            OutlinedButton(onClick = { vm.loadAll() }) { Text("Actualizar") }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { vm.exportAllMetrics() }) { Text("📊 Métricas globales") }
+                OutlinedButton(onClick = { vm.loadAll() }) { Text("Actualizar") }
+            }
         }
 
         if (sessions.isEmpty()) {
@@ -45,12 +49,13 @@ fun JornadasTab(vm: AdminViewModel) {
                     val stats = statsMap[session.id]
                     LaunchedEffect(session.id) { vm.loadSessionStats(session.id) }
                     SessionCard(
-                        session  = session,
-                        stats    = stats,
-                        onExport = { vm.exportSession(session.id) },
+                        session     = session,
+                        stats       = stats,
+                        onExport    = { vm.exportSession(session.id) },
+                        onMetrics   = { vm.exportSessionMetrics(session.id) },
                         onDeleteGps = { vm.deleteGpsFromServer(session.id) },
-                        onClose  = { vm.closeSession(session.id) },
-                        onDetail = { detailFor = session }
+                        onClose     = { vm.closeSession(session.id) },
+                        onDetail    = { detailFor = session }
                     )
                 }
             }
@@ -66,11 +71,13 @@ fun JornadasTab(vm: AdminViewModel) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SessionCard(
     session: SessionAdminDto,
     stats: SessionStats?,
     onExport: () -> Unit,
+    onMetrics: () -> Unit,
     onDeleteGps: () -> Unit,
     onClose: () -> Unit,
     onDetail: () -> Unit
@@ -124,12 +131,19 @@ private fun SessionCard(
             }
 
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement   = Arrangement.spacedBy(4.dp),
+                modifier              = Modifier.fillMaxWidth()
+            ) {
                 Button(onClick = onDetail, contentPadding = PaddingValues(horizontal = 12.dp)) {
                     Text("Ver detalle")
                 }
                 OutlinedButton(onClick = onExport, contentPadding = PaddingValues(horizontal = 12.dp)) {
-                    Text("CSV")
+                    Text("CSV crudo")
+                }
+                OutlinedButton(onClick = onMetrics, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                    Text("📊 Métricas")
                 }
                 if (session.is_active) {
                     OutlinedButton(
@@ -137,7 +151,6 @@ private fun SessionCard(
                         contentPadding = PaddingValues(horizontal = 12.dp)
                     ) { Text("Cerrar jornada") }
                 }
-                Spacer(Modifier.weight(1f))
                 TextButton(
                     onClick = { showDeleteConfirm = true },
                     colors  = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)

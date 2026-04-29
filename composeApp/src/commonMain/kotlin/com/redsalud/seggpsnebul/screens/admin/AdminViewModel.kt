@@ -13,6 +13,7 @@ class AdminViewModel {
     private val geovisorRepo     = GeovisorRepository()
     private val assignmentsRepo  = AssignmentsRepository()
     private val alertsRepo       = AlertsAdminRepository()
+    private val metricsExporter  = MetricsExporter()
 
     // ── Jornadas / Usuarios ───────────────────────────────────────────────────
     private val _sessions = MutableStateFlow<List<SessionAdminDto>>(emptyList())
@@ -108,6 +109,26 @@ class AdminViewModel {
                 .onFailure { _message.value = "Error exportando: ${it.message}" }
             _isLoading.value = false
             loadAll()
+        }
+    }
+
+    fun exportSessionMetrics(sessionId: String) {
+        scope.launch {
+            _isLoading.value = true
+            metricsExporter.buildSessionMetrics(sessionId)
+                .onSuccess { (csv, fn) -> platformSaveCsv(sessionId, csv, fn) }
+                .onFailure { _message.value = "Error métricas: ${it.message}" }
+            _isLoading.value = false
+        }
+    }
+
+    fun exportAllMetrics() {
+        scope.launch {
+            _isLoading.value = true
+            metricsExporter.buildAllMetrics()
+                .onSuccess { (csv, fn) -> platformSaveCsv("global", csv, fn) }
+                .onFailure { _message.value = "Error métricas globales: ${it.message}" }
+            _isLoading.value = false
         }
     }
 

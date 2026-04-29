@@ -81,7 +81,7 @@ private fun sessionsJson(sessions: List<SessionAdminDto>): String =
     }}]"
 
 private fun statsJson(stats: SessionStats?, workerCount: Int): String =
-    """{"workers":$workerCount,"gps":${stats?.trackCount ?: "-"},"alerts":${stats?.alertCount ?: "-"},"blocks":${stats?.blockCount ?: "-"}}"""
+    """{"workers":$workerCount,"gps":${stats?.trackCount ?: 0},"alerts":${stats?.alertCount ?: 0},"blocks":${stats?.blockCount ?: 0},"loaded":${stats != null}}"""
 
 private fun workersJson(positions: List<WorkerPositionDto>): String =
     "[${positions.joinToString(",") {
@@ -216,6 +216,7 @@ private fun createGeovisor(): Unit = js("""
     container: 'geo-map',
     style: {
       version: 8,
+      glyphs:  'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
       sources: { osm: { type:'raster', tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution:'&copy; OpenStreetMap' }},
       layers:  [{ id:'osm', type:'raster', source:'osm' }]
     },
@@ -324,12 +325,13 @@ private fun updateSidebarStats(statsJson: String): Unit = js("""
 (function(sJson) {
   var el = document.getElementById('geo-stats'); if(!el) return;
   var s = JSON.parse(sJson);
+  function fmt(v) { return s.loaded ? v : '—'; }
   el.innerHTML = '<div style="font-size:10px;font-weight:700;color:#999;letter-spacing:.6px;margin-bottom:8px">ESTADÍSTICAS</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">' +
     statCard('👷', 'En campo', s.workers) +
-    statCard('📍', 'Puntos GPS', s.gps) +
-    statCard('⚠️', 'Alertas', s.alerts) +
-    statCard('🏘️', 'Manzanas', s.blocks) +
+    statCard('📍', 'Puntos GPS', fmt(s.gps)) +
+    statCard('⚠️', 'Alertas', fmt(s.alerts)) +
+    statCard('🏘️', 'Manzanas', fmt(s.blocks)) +
     '</div>';
   function statCard(icon, label, val) {
     return '<div style="background:#f0f4ff;border-radius:8px;padding:8px 10px;text-align:center">' +
