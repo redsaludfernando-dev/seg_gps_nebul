@@ -43,7 +43,9 @@ actual @Composable fun MapLibreView(
     zonas: List<ZonaDto>
 ) {
     val tileServer = remember {
-        pmtilesPath?.let { LocalTileServer(it).also { s -> s.start() } }
+        pmtilesPath?.let {
+            runCatching { LocalTileServer(it).also { s -> s.start() } }.getOrNull()
+        }
     }
     DisposableEffect(Unit) { onDispose { tileServer?.stop() } }
 
@@ -65,7 +67,7 @@ actual @Composable fun MapLibreView(
                 MapView(ctx).apply {
                     getMapAsync { map ->
                         mapHolder.map = map
-                        map.setStyle(Style.Builder().fromJson(buildStyleJson(tileServer?.port))) { style ->
+                        map.setStyle(Style.Builder().fromJson(buildStyleJson(tileServer))) { style ->
                             map.cameraPosition = CameraPosition.Builder()
                                 .target(RIOJA_CENTER).zoom(DEFAULT_ZOOM).build()
 
@@ -235,21 +237,25 @@ private fun relativeTime(capturedAt: Long): String {
 
 // ─── Map style ────────────────────────────────────────────────────────────────
 
-private fun buildStyleJson(tileServerPort: Int?): String {
-    if (tileServerPort == null) {
+private fun buildStyleJson(tileServer: LocalTileServer?): String {
+    if (tileServer == null || tileServer.port == 0) {
         return """{"version":8,"sources":{},"layers":[{"id":"bg","type":"background","paint":{"background-color":"#f5f0e8"}}]}"""
     }
-    return omtStyle("pmtiles://http://localhost:$tileServerPort/tiles.pmtiles")
+    val tilesUrl = "http://localhost:${tileServer.port}/tiles/{z}/{x}/{y}.pbf"
+    return omtStyle(tilesUrl, tileServer.minZoom, tileServer.maxZoom)
 }
 
-private fun omtStyle(tilesUrl: String) = """
+private fun omtStyle(tilesUrl: String, minZoom: Int, maxZoom: Int) = """
 {
   "version": 8,
   "name": "Rioja GPS",
   "sources": {
     "omt": {
       "type": "vector",
-      "url": "$tilesUrl",
+      "tiles": ["$tilesUrl"],
+      "minzoom": $minZoom,
+      "maxzoom": $maxZoom,
+      "scheme": "xyz",
       "attribution": "© OpenStreetMap"
     }
   },
@@ -273,12 +279,7 @@ private fun omtStyle(tilesUrl: String) = """
                  "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 4] } },
     { "id": "building",    "type": "fill",   "source": "omt", "source-layer": "building",
       "minzoom": 13,
-      "paint": { "fill-color": "#d8d0c8", "fill-outline-color": "#b8b0a8" } },
-    { "id": "place_city",  "type": "symbol", "source": "omt", "source-layer": "place",
-      "filter": ["in", "class", "city", "town", "village"],
-      "layout": { "text-field": ["get", "name:es"], "text-size": 12,
-                  "text-font": ["Open Sans Regular"] },
-      "paint": { "text-color": "#333", "text-halo-color": "#fff", "text-halo-width": 1 } }
+      "paint": { "fill-color": "#d8d0c8", "fill-outline-color": "#b8b0a8" } }
   ]
 }
 """.trimIndent()

@@ -7,20 +7,29 @@ import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.io.File
-import java.io.RandomAccessFile
 
 class LocalTileServer(private val pmtilesPath: String) {
     private var server: EmbeddedServer<*, *>? = null
+    private var reader: PmTilesReader? = null
+
     var port: Int = 0
+        private set
+    var minZoom: Int = 0
+        private set
+    var maxZoom: Int = 14
         private set
 
     fun start() {
+        val r = PmTilesReader(File(pmtilesPath))
+        r.open()
+        reader = r
+        minZoom = r.minZoom
+        maxZoom = r.maxZoom
+
         val freePort = java.net.ServerSocket(0).use { it.localPort }
         val engine = embeddedServer(CIO, port = freePort) {
-            install(io.ktor.server.plugins.cors.routing.CORS) {
-                anyHost()
-            }
-            routing { setupRoutes(pmtilesPath) }
+            install(io.ktor.server.plugins.cors.routing.CORS) { anyHost() }
+            routing { setupRoutes(r) }
         }
         engine.start(wait = false)
         port = freePort
@@ -30,39 +39,25 @@ class LocalTileServer(private val pmtilesPath: String) {
     fun stop() {
         server?.stop(0, 0)
         server = null
+        reader?.close()
+        reader = null
     }
 }
 
-private fun Routing.setupRoutes(pmtilesPath: String) {
-    get("/tiles.pmtiles") {
-        val file = File(pmtilesPath)
-        if (!file.exists()) { call.respond(HttpStatusCode.NotFound); return@get }
-
-        val rangeHeader = call.request.headers[HttpHeaders.Range]
+private fun Routing.setupRoutes(reader: PmTilesReader) {
+    get("/tiles/{z}/{x}/{y}.pbf") {
+        val z = call.parameters["z"]?.toIntOrNull()
+        val x = call.parameters["x"]?.toIntOrNull()
+        val y = call.parameters["y"]?.toIntOrNull()
+        if (z == null || x == null || y == null) {
+            call.respond(HttpStatusCode.BadRequest); return@get
+        }
+        val tile = reader.getTile(z, x, y)
         call.response.header(HttpHeaders.AccessControlAllowOrigin, "*")
-        call.response.header(HttpHeaders.AcceptRanges, "bytes")
-
-        if (rangeHeader != null) {
-            val fileLen = file.length()
-            val range = parseByteRange(rangeHeader, fileLen)
-            val len = (range.last - range.first + 1).toInt()
-            val bytes = ByteArray(len)
-            RandomAccessFile(file, "r").use { raf ->
-                raf.seek(range.first)
-                raf.readFully(bytes)
-            }
-            call.response.header(HttpHeaders.ContentRange, "bytes ${range.first}-${range.last}/$fileLen")
-            call.respondBytes(bytes, ContentType.Application.OctetStream, HttpStatusCode.PartialContent)
+        if (tile == null) {
+            call.respond(HttpStatusCode.NoContent)
         } else {
-            call.respondFile(file)
+            call.respondBytes(tile, ContentType("application", "x-protobuf"))
         }
     }
-}
-
-private fun parseByteRange(header: String, fileLen: Long): LongRange {
-    val spec = header.removePrefix("bytes=")
-    val parts = spec.split("-")
-    val start = parts[0].toLongOrNull() ?: 0L
-    val end = parts.getOrNull(1)?.toLongOrNull() ?: (fileLen - 1)
-    return start..minOf(end, fileLen - 1)
 }

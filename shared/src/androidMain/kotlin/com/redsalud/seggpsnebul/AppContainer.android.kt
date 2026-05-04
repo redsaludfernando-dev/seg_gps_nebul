@@ -11,6 +11,7 @@ import com.redsalud.seggpsnebul.data.remote.AuthResult
 import com.redsalud.seggpsnebul.data.remote.GpsSyncRepository
 import com.redsalud.seggpsnebul.data.remote.RealtimeRepository
 import com.redsalud.seggpsnebul.data.remote.SyncManager
+import com.redsalud.seggpsnebul.data.remote.UsersSyncRepository
 import com.redsalud.seggpsnebul.domain.model.User
 import com.redsalud.seggpsnebul.domain.model.UserRole
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +31,7 @@ actual object AppContainer {
     private lateinit var _connectivityObserver: ConnectivityObserver
     private lateinit var _alertSyncRepository: AlertSyncRepository
     private lateinit var _syncManager: SyncManager
+    private lateinit var _usersSyncRepository: UsersSyncRepository
 
     // ── Exposed to androidMain consumers (worker screens, RoleViewModel, etc.) ──
     val db: SegGpsDatabase get() = _db
@@ -38,6 +40,7 @@ actual object AppContainer {
     val gpsSyncRepository: GpsSyncRepository get() = _gpsSyncRepository
     val alertSyncRepository: AlertSyncRepository get() = _alertSyncRepository
     val syncManager: SyncManager get() = _syncManager
+    val usersSyncRepository: UsersSyncRepository get() = _usersSyncRepository
 
     // ── expect members ────────────────────────────────────────────────────────
     actual val currentUser = MutableStateFlow<User?>(null)
@@ -58,7 +61,8 @@ actual object AppContainer {
     fun init(driverFactory: DatabaseDriverFactory) {
         _db = SegGpsDatabase(driverFactory.createDriver())
         _localDataSource = LocalDataSource(_db)
-        _authRepository = AuthRepository(_localDataSource)
+        _usersSyncRepository = UsersSyncRepository()
+        _authRepository = AuthRepository(_localDataSource, _usersSyncRepository)
         _gpsSyncRepository = GpsSyncRepository(_localDataSource)
         _alertSyncRepository = AlertSyncRepository(_localDataSource)
         _syncManager = SyncManager(_localDataSource, _gpsSyncRepository, _alertSyncRepository)

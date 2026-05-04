@@ -15,7 +15,10 @@ import kotlin.time.ExperimentalTime
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
-class AuthRepository(private val local: LocalDataSource) {
+class AuthRepository(
+    private val local: LocalDataSource,
+    private val usersSync: UsersSyncRepository
+) {
 
     @Serializable
     private data class AllowedRow(
@@ -65,6 +68,9 @@ class AuthRepository(private val local: LocalDataSource) {
         local.insertUser(id, dni, phoneNumber, fullName, role.value, hashedPin, deviceId, now)
 
         val user = User(id, dni, phoneNumber, fullName, role, hashedPin, deviceId, isActive = true)
+
+        usersSync.upsertUser(user, now)
+
         return AuthResult.WorkerSuccess(user)
     }
 
