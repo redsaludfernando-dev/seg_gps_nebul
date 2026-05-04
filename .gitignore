@@ -8,6 +8,9 @@ local.properties
 *.keystore
 google-services.json
 .DS_Store
+
+# Configuracion local de Claude Code (puede contener credenciales en allowlist)
+.claude/settings.local.json
 /composeApp/build/
 /shared/build/
 

@@ -52,7 +52,7 @@ Kotlin 2.1.20 · Compose Multiplatform 1.7.0 · AGP 8.9.1 · Gradle 8.11.1 · JD
 10. **Migraciones**: nunca editar una ya aplicada. Crear nueva con timestamp posterior.
 11. **APK release**: lo compila el usuario manualmente desde Android Studio. **No** ejecutar `assembleRelease` ni manipular el keystore.
 12. **Push a `main`**: dispara deploy de Pages. No pushear código que no compile en wasmJs.
-13. **Secrets**: `local.properties`, `*.jks`, tokens, contraseñas — nunca al repo. Si se ven commiteados, alertar al usuario.
+13. **Secrets**: `local.properties`, `*.jks`, `*.keystore`, `google-services.json`, **`.claude/settings.local.json`**, tokens, contraseñas — nunca al repo. `.claude/settings.local.json` puede contener cadenas de conexión PostgreSQL en su allowlist de bash; es estrictamente local. Si se ven commiteados, alertar al usuario.
 14. **Binarios grandes** en `scripts/`: ya gitignorados; no forzar add con `-f`.
 15. **No agregar** comentarios obvios, `Plan.md`, `NOTES.md`, ni doc files no pedidos.
 
