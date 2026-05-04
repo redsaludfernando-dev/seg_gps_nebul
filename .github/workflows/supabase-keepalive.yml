@@ -1,11 +1,11 @@
 name: Supabase keep-alive
 
-# Pinga la API REST de Supabase cada día para evitar la pausa
+# Ping a la API REST de Supabase cada día para evitar la pausa
 # automática del proyecto en el plan free tras 7 días sin actividad.
 # Cron: 06:00 UTC ≈ 01:00 hora Perú.
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:
