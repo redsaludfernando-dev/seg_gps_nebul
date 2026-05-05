@@ -20,8 +20,8 @@ data class SessionAdminDto(
     val name: String,
     val brigade_code: String?,
     val started_by: String,
-    val started_at: Long,
-    val ended_at: Long?,
+    val started_at: String,
+    val ended_at: String?,
     val is_active: Boolean,
     val export_done: Boolean
 )
@@ -40,7 +40,7 @@ data class UserAdminDto(
 data class AllowedUserDto(
     val dni: String,
     val phone_number: String,
-    val loaded_at: Long? = null
+    val loaded_at: String? = null
 )
 
 data class SessionStats(
@@ -60,15 +60,13 @@ private data class UserInsertDto(
     val full_name: String,
     val role: String,
     val pin: String,
-    val is_active: Boolean,
-    val created_at: Long
+    val is_active: Boolean
 )
 
 @Serializable
 private data class AllowedUserInsertDto(
     val dni: String,
-    val phone_number: String,
-    val loaded_at: Long
+    val phone_number: String
 )
 
 // ─── Repository ───────────────────────────────────────────────────────────────
@@ -133,12 +131,10 @@ class AdminRepository {
 
     // ── Allowed users (whitelist DNIs) ───────────────────────────────────────
 
-    @OptIn(ExperimentalTime::class)
     suspend fun addAllowedUser(dni: String, phone: String): Result<Unit> = withContext(Dispatchers.Default) {
         runCatching {
-            val now = Clock.System.now().toEpochMilliseconds()
             supabaseClient.postgrest["allowed_users"].upsert(
-                AllowedUserInsertDto(dni.trim(), phone.trim(), now)
+                AllowedUserInsertDto(dni.trim(), phone.trim())
             ) { defaultToNull = false }
             Unit
         }
@@ -154,7 +150,7 @@ class AdminRepository {
 
     // ── Trabajadores ────────────────────────────────────────────────────────
 
-    @OptIn(ExperimentalUuidApi::class, ExperimentalTime::class)
+    @OptIn(ExperimentalUuidApi::class)
     suspend fun createUser(
         dni: String,
         phone: String,
@@ -167,7 +163,6 @@ class AdminRepository {
             require(dni.isNotBlank()) { "DNI vacío" }
             require(fullName.isNotBlank()) { "Nombre vacío" }
 
-            // Asegurar que el DNI esté en allowed_users (FK desde users.dni)
             addAllowedUser(dni, phone).getOrThrow()
 
             supabaseClient.postgrest["users"].insert(
@@ -178,8 +173,7 @@ class AdminRepository {
                     full_name = fullName.trim(),
                     role = role,
                     pin = PinHasher.hash(pin),
-                    is_active = true,
-                    created_at = Clock.System.now().toEpochMilliseconds()
+                    is_active = true
                 )
             ) { defaultToNull = false }
             Unit
@@ -244,7 +238,7 @@ class AdminRepository {
     @OptIn(ExperimentalTime::class)
     suspend fun closeSession(sessionId: String): Result<Unit> = withContext(Dispatchers.Default) {
         runCatching {
-            val now = Clock.System.now().toEpochMilliseconds()
+            val now = Clock.System.now().toString()
             supabaseClient.postgrest["sessions"].update({
                 set("is_active", false)
                 set("ended_at", now)

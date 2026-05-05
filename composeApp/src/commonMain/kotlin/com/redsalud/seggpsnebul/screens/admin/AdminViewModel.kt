@@ -50,7 +50,7 @@ class AdminViewModel {
     val pendingAlerts = MutableStateFlow(0)
     val pendingBlocks = MutableStateFlow(0)
     val isSyncing     = MutableStateFlow(false)
-    val lastSyncAt    = MutableStateFlow<Long?>(null)
+    val lastSyncAt    = MutableStateFlow<String?>(null)
     val syncLastError = MutableStateFlow<String?>(null)
 
     // ── Zonas ─────────────────────────────────────────────────────────────────

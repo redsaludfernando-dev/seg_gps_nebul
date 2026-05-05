@@ -14,6 +14,7 @@ import com.redsalud.seggpsnebul.data.remote.AssignmentDto
 import com.redsalud.seggpsnebul.data.remote.SessionAdminDto
 import com.redsalud.seggpsnebul.data.remote.SessionStats
 import com.redsalud.seggpsnebul.data.remote.UserAdminDto
+import kotlinx.datetime.Instant
 
 @Composable
 fun JornadasTab(vm: AdminViewModel) {
@@ -96,7 +97,9 @@ private fun SessionCard(
                     Text(session.name, style = MaterialTheme.typography.titleSmall)
                     Text(fmtTs(session.started_at), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    val duration = session.ended_at?.let { (it - session.started_at) / 60_000 }
+                    val duration = session.ended_at?.let {
+                        (Instant.parse(it).toEpochMilliseconds() - Instant.parse(session.started_at).toEpochMilliseconds()) / 60_000
+                    }
                     if (duration != null) {
                         Text("Duración: ${duration} min", style = MaterialTheme.typography.labelSmall)
                     }

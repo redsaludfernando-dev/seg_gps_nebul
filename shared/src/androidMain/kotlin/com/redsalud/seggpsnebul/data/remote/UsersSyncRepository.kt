@@ -4,6 +4,7 @@ import com.redsalud.seggpsnebul.domain.model.User
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -16,7 +17,7 @@ private data class UserDto(
     val pin: String,
     val device_id: String?,
     val is_active: Boolean,
-    val created_at: Long
+    val created_at: String
 )
 
 class UsersSyncRepository {
@@ -34,7 +35,7 @@ class UsersSyncRepository {
                         pin = user.pin,
                         device_id = user.deviceId,
                         is_active = user.isActive,
-                        created_at = createdAt
+                        created_at = Instant.fromEpochMilliseconds(createdAt).toString()
                     )
                 ) { defaultToNull = false }
                 Unit

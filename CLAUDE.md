@@ -1,7 +1,7 @@
 # CLAUDE.md — Guía operativa para Claude Code
 
 > Este archivo es la guía vinculante para cualquier asistente (Claude / agentes) que trabaje en este repositorio. El `README.md` describe el producto; este documento describe **cómo se trabaja sobre el código**. El `SKILL.md` describe **qué skills cargar** para asistir mejor en el trabajo.
->
+> 
 > Si una instrucción de aquí entra en conflicto con un mensaje del usuario, **prevalece el usuario**. Si entra en conflicto con el `README.md`, **prevalece este archivo** (el README puede quedar desactualizado).
 
 ---
@@ -37,23 +37,23 @@
 
 Las versiones se leen de `gradle/libs.versions.toml`. **Nunca** introducir una versión distinta sin actualizar el catálogo.
 
-| Componente | Versión | Notas |
-|---|---|---|
-| Kotlin | 2.1.20 | Multiplatform, K2 |
-| Compose Multiplatform | 1.7.0 | UI común (Android + wasmJs) |
-| AGP | 8.9.1 | Android Gradle Plugin |
-| Gradle | 8.11.1 | wrapper |
-| JDK | 17 | obligatorio (build y CI) |
-| Android compileSdk / minSdk | 35 / 24 | |
-| SQLDelight | 2.3.2 | sólo Android |
-| Supabase Kotlin | 3.4.1 | auth + postgrest + realtime + storage |
-| Ktor | 3.4.0 | client (Android, wasmJs) + server CIO (Android) |
-| kotlinx-coroutines | 1.8.1 | core, android, test |
-| kotlinx-serialization-json | 1.7.3 | |
-| kotlinx-datetime | 0.6.1 declarado, **0.7.1 resuelto** por Supabase | ver §6 |
-| MapLibre Android SDK | 11.8.0 | Android nativo |
-| MapLibre GL JS | 4.x | Web (wasmJs vía DOM/JS interop) |
-| play-services-location | 21.3.0 | sólo Android |
+| Componente                  | Versión                                          | Notas                                           |
+| --------------------------- | ------------------------------------------------ | ----------------------------------------------- |
+| Kotlin                      | 2.1.20                                           | Multiplatform, K2                               |
+| Compose Multiplatform       | 1.7.0                                            | UI común (Android + wasmJs)                     |
+| AGP                         | 8.9.1                                            | Android Gradle Plugin                           |
+| Gradle                      | 8.11.1                                           | wrapper                                         |
+| JDK                         | 17                                               | obligatorio (build y CI)                        |
+| Android compileSdk / minSdk | 35 / 24                                          |                                                 |
+| SQLDelight                  | 2.3.2                                            | sólo Android                                    |
+| Supabase Kotlin             | 3.4.1                                            | auth + postgrest + realtime + storage           |
+| Ktor                        | 3.4.0                                            | client (Android, wasmJs) + server CIO (Android) |
+| kotlinx-coroutines          | 1.8.1                                            | core, android, test                             |
+| kotlinx-serialization-json  | 1.7.3                                            |                                                 |
+| kotlinx-datetime            | 0.6.1 declarado, **0.7.1 resuelto** por Supabase | ver §6                                          |
+| MapLibre Android SDK        | 11.8.0                                           | Android nativo                                  |
+| MapLibre GL JS              | 4.x                                              | Web (wasmJs vía DOM/JS interop)                 |
+| play-services-location      | 21.3.0                                           | sólo Android                                    |
 
 ### Estructura de módulos
 
@@ -155,13 +155,13 @@ seg_gps_nebul/
 
 ### Verificación obligatoria antes de declarar "listo"
 
-| Cambio toca... | Comando mínimo de verificación |
-|---|---|
+| Cambio toca...                     | Comando mínimo de verificación                                                |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
 | `commonMain` (shared o composeApp) | `./gradlew :shared:compileDebugKotlinAndroid :composeApp:compileKotlinWasmJs` |
-| `androidMain` | `./gradlew :composeApp:assembleDebug` |
-| `wasmJsMain` | `./gradlew :composeApp:wasmJsBrowserDistribution` |
-| Lógica de dominio o filtros | `./gradlew :shared:allTests` |
-| Migración SQL | `supabase db push --dry-run` antes de aplicar |
+| `androidMain`                      | `./gradlew :composeApp:assembleDebug`                                         |
+| `wasmJsMain`                       | `./gradlew :composeApp:wasmJsBrowserDistribution`                             |
+| Lógica de dominio o filtros        | `./gradlew :shared:allTests`                                                  |
+| Migración SQL                      | `supabase db push --dry-run` antes de aplicar                                 |
 
 **No marques una tarea como completada sin haber compilado los targets afectados.** Si no se puede compilar localmente (ej. falta el SDK Android), decirlo explícitamente al usuario, no asumir que funciona.
 
@@ -188,14 +188,14 @@ seg_gps_nebul/
 
 ### CLI requeridas (verificar al inicio si dudas)
 
-| CLI | Uso | Verificación |
-|---|---|---|
-| `git` | control de versiones | `git --version` |
-| `gh` | GitHub (PRs, secrets, runs de Actions) | `gh auth status` debe mostrar `redsaludfernando-dev` logueado |
-| `supabase` | migraciones, info del proyecto | `supabase projects list` debe listar `seg-gps-nebul` linkeado (`mltudqhjsqmnospewgxa`) |
-| `adb` (opcional) | debug Android | `adb devices` |
-| `./gradlew` | build (wrapper, **no** `gradle` global) | `./gradlew --version` |
-| `java -version` | debe reportar 17 | |
+| CLI              | Uso                                     | Verificación                                                                   |
+| ---------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
+| `git`            | control de versiones                    | `git --version`                                                                |
+| `gh`             | GitHub (PRs, secrets, runs de Actions)  | `gh auth status` debe mostrar `redsaludfernando-dev` logueado                  |
+| `supabase`       | migraciones, info del proyecto          | `supabase projects list` debe listar `seg-gps-nebul` linkeado (`MetaxNebu26+`) |
+| `adb` (opcional) | debug Android                           | `adb devices`                                                                  |
+| `./gradlew`      | build (wrapper, **no** `gradle` global) | `./gradlew --version`                                                          |
+| `java -version`  | debe reportar 17                        |                                                                                |
 
 Si una CLI falla autenticación, **no intentar reautenticar automáticamente** — pedir al usuario que ejecute `! gh auth login` o `! supabase login` en el prompt.
 
@@ -267,14 +267,14 @@ Antes de commitear, verifica que ningún `.kt`/`.kts`/`.toml` nuevo haya quedado
 
 Para tareas grandes, usar agentes especializados como subprocesos del razonamiento — no como personas distintas. Roles sugeridos para *este* repo:
 
-| Rol | Cuándo invocar | Alcance |
-|---|---|---|
-| **backend** (Supabase + repos) | esquema, RLS, migraciones, repos en `shared/data/remote/`, `SyncManager`, `RealtimeRepository` | sólo `shared/`, `supabase/migrations/`. No toca UI. |
-| **android** | `composeApp/androidMain`, `shared/androidMain`, `GpsTrackingService`, MapLibre nativo, notificaciones, sensores | sólo lo que vive en androidMain o requiere SDK Android. |
-| **web** | `composeApp/wasmJsMain`, `shared/wasmJsMain`, MapLibre GL JS embebido, panel admin | sólo lo que vive en wasmJsMain o `commonMain` con foco en navegador. |
-| **ui-common** | `composeApp/commonMain`, screens compartidas (Auth, Admin), navegación raíz | UI Compose Multiplatform que sirve a Android y Web. |
-| **infra / CI** | `.github/workflows/`, `build.gradle.kts`, `libs.versions.toml`, ProGuard, gitignore, deploy a Pages | nunca tocar lógica de negocio. |
-| **test** | `shared/commonTest`, futuros tests instrumentados de Android | sólo tests; si falta cobertura, proponer pero no forzar refactor de prod para "facilitar tests". |
+| Rol                            | Cuándo invocar                                                                                                  | Alcance                                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **backend** (Supabase + repos) | esquema, RLS, migraciones, repos en `shared/data/remote/`, `SyncManager`, `RealtimeRepository`                  | sólo `shared/`, `supabase/migrations/`. No toca UI.                                              |
+| **android**                    | `composeApp/androidMain`, `shared/androidMain`, `GpsTrackingService`, MapLibre nativo, notificaciones, sensores | sólo lo que vive en androidMain o requiere SDK Android.                                          |
+| **web**                        | `composeApp/wasmJsMain`, `shared/wasmJsMain`, MapLibre GL JS embebido, panel admin                              | sólo lo que vive en wasmJsMain o `commonMain` con foco en navegador.                             |
+| **ui-common**                  | `composeApp/commonMain`, screens compartidas (Auth, Admin), navegación raíz                                     | UI Compose Multiplatform que sirve a Android y Web.                                              |
+| **infra / CI**                 | `.github/workflows/`, `build.gradle.kts`, `libs.versions.toml`, ProGuard, gitignore, deploy a Pages             | nunca tocar lógica de negocio.                                                                   |
+| **test**                       | `shared/commonTest`, futuros tests instrumentados de Android                                                    | sólo tests; si falta cobertura, proponer pero no forzar refactor de prod para "facilitar tests". |
 
 Para una **feature** que cruza targets: planear en `commonMain` primero (ui-common + backend), luego implementar adapters en `android` y `web` en paralelo. Para **refactor**: backend + test antes que ui-common. Para **CI/CD**: infra solo, sin tocar código de producción en el mismo PR.
 

@@ -8,7 +8,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.redsalud.seggpsnebul.screens.role.SyncStatusIndicator
-import kotlinx.datetime.Instant
 
 private enum class AdminTab { MAPA, TRABAJADORES, JORNADAS, ASIGNACIONES, ZONAS, SYNC }
 
@@ -173,6 +172,4 @@ private fun SyncStatusCard(label: String, value: String, good: Boolean) {
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-internal fun fmtTs(ms: Long): String =
-    Instant.fromEpochMilliseconds(ms).toString()
-        .replace("T", " ").take(16).replace("Z", "")
+internal fun fmtTs(iso: String): String = iso.take(16).replace("T", " ")

@@ -17,7 +17,7 @@ data class GpsRow(
     val latitude: Double,
     val longitude: Double,
     val accuracy: Double?,
-    val captured_at: Long,
+    val captured_at: String,
     val sync_status: String
 )
 
@@ -31,7 +31,7 @@ data class AlertRow(
     val longitude: Double?,
     val is_attended: Boolean,
     val attended_by: String?,
-    val created_at: Long
+    val created_at: String
 )
 
 @Serializable
@@ -41,7 +41,7 @@ data class BlockRow(
     val assigned_by: String,
     val block_name: String,
     val notes: String?,
-    val assigned_at: Long
+    val assigned_at: String
 )
 
 @Serializable
@@ -49,8 +49,8 @@ data class SessionRow(
     val id: String,
     val name: String,
     val started_by: String,
-    val started_at: Long,
-    val ended_at: Long?
+    val started_at: String,
+    val ended_at: String?
 )
 
 @Serializable
@@ -99,7 +99,9 @@ class CsvExporter {
                 val csv = buildString {
                     val workerName = users[session.started_by]?.full_name ?: session.started_by
                     val workerRole = users[session.started_by]?.role ?: ""
-                    val durationMin = session.ended_at?.let { (it - session.started_at) / 60_000 } ?: 0L
+                    val durationMin = session.ended_at?.let {
+                    (Instant.parse(it).toEpochMilliseconds() - Instant.parse(session.started_at).toEpochMilliseconds()) / 60_000
+                } ?: 0L
 
                     appendLine("## SESION")
                     appendLine("id,nombre,iniciada_por,cargo,inicio_utc,fin_utc,duracion_min,puntos_gps,alertas,manzanas")
@@ -143,8 +145,7 @@ class CsvExporter {
             }
         }
 
-    private fun fmtTs(ms: Long): String =
-        Instant.fromEpochMilliseconds(ms).toString().replace("T", " ").take(19)
+    private fun fmtTs(iso: String): String = iso.take(19).replace("T", " ")
 
     private fun q(s: String): String = "\"${s.replace("\"", "\"\"")}\""
     private fun row(vararg values: Any?): String = values.joinToString(",") { it?.toString() ?: "" }

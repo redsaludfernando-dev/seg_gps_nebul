@@ -4,8 +4,6 @@ import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -17,7 +15,7 @@ data class AssignmentDto(
     val assigned_by: String,
     val block_name: String,
     val notes: String? = null,
-    val assigned_at: Long
+    val assigned_at: String
 )
 
 @Serializable
@@ -27,8 +25,7 @@ private data class AssignmentInsertDto(
     val assigned_to: String,
     val assigned_by: String,
     val block_name: String,
-    val notes: String?,
-    val assigned_at: Long
+    val notes: String?
 )
 
 class AssignmentsRepository {
@@ -43,7 +40,7 @@ class AssignmentsRepository {
             }
         }
 
-    @OptIn(ExperimentalUuidApi::class, ExperimentalTime::class)
+    @OptIn(ExperimentalUuidApi::class)
     suspend fun create(
         sessionId: String,
         assignedTo: String,
@@ -60,8 +57,7 @@ class AssignmentsRepository {
                     assigned_to = assignedTo,
                     assigned_by = assignedBy,
                     block_name = blockName.trim(),
-                    notes = notes?.trim()?.takeIf { it.isNotEmpty() },
-                    assigned_at = Clock.System.now().toEpochMilliseconds()
+                    notes = notes?.trim()?.takeIf { it.isNotEmpty() }
                 )
             ) { defaultToNull = false }
             Unit

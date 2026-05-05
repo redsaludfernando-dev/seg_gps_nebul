@@ -39,8 +39,8 @@ class MetricsExporter {
         val id: String,
         val name: String,
         val brigade_code: String?,
-        val started_at: Long,
-        val ended_at: Long?
+        val started_at: String,
+        val ended_at: String?
     )
 
     private data class WorkerStats(
@@ -118,7 +118,7 @@ class MetricsExporter {
 
                 val csv = buildString {
                     appendLine("# Métricas globales · todas las jornadas")
-                    appendLine("# Generado: ${fmtTs(nowMs())}")
+                    appendLine("# Generado: ${fmtTs(Clock.System.now().toString())}")
                     appendLine()
                     appendLine(headerRow(prependSession = true))
 
@@ -134,7 +134,9 @@ class MetricsExporter {
                             .decodeList<BlockRow>()
 
                         val byUser = aggregate(tracks, alerts, blocks, users)
-                        val durMin = s.ended_at?.let { (it - s.started_at) / 60_000 } ?: 0L
+                        val durMin = s.ended_at?.let {
+                            (Instant.parse(it).toEpochMilliseconds() - Instant.parse(s.started_at).toEpochMilliseconds()) / 60_000
+                        } ?: 0L
                         byUser.values.forEach { st ->
                             appendLine(workerRow(st, sessionPrefix = listOf(
                                 s.id, q(s.name), s.brigade_code ?: "", fmtTs(s.started_at),
@@ -176,12 +178,12 @@ class MetricsExporter {
             val st = statsFor(uid)
             st.gpsPoints = sorted.size
             if (sorted.isNotEmpty()) {
-                st.firstTs = sorted.first().captured_at
-                st.lastTs  = sorted.last().captured_at
+                st.firstTs = Instant.parse(sorted.first().captured_at).toEpochMilliseconds()
+                st.lastTs  = Instant.parse(sorted.last().captured_at).toEpochMilliseconds()
             }
             for (i in 1 until sorted.size) {
                 val a = sorted[i - 1]; val b = sorted[i]
-                val dt = (b.captured_at - a.captured_at).coerceAtLeast(0)
+                val dt = (Instant.parse(b.captured_at).toEpochMilliseconds() - Instant.parse(a.captured_at).toEpochMilliseconds()).coerceAtLeast(0)
                 if (dt > 3 * 60_000) {
                     // gap largo → tiempo inactivo, no cuenta para distancia
                     st.idleMs += dt
@@ -215,7 +217,9 @@ class MetricsExporter {
 
     private fun renderSessionCsv(session: SessionMeta, stats: List<WorkerStats>): String =
         buildString {
-            val durMin = session.ended_at?.let { (it - session.started_at) / 60_000 } ?: 0L
+            val durMin = session.ended_at?.let {
+                (Instant.parse(it).toEpochMilliseconds() - Instant.parse(session.started_at).toEpochMilliseconds()) / 60_000
+            } ?: 0L
             appendLine("## METRICAS_JORNADA")
             appendLine("id,nombre,brigada,inicio_utc,fin_utc,duracion_min,trabajadores")
             appendLine(rowOf(
@@ -246,8 +250,9 @@ class MetricsExporter {
                     total.manzanasAssigned += s.manzanasAssigned
                 }
                 // promediar minutos activos a partir del rango de la sesión
-                total.firstTs = session.started_at
-                total.lastTs  = session.ended_at ?: stats.mapNotNull { it.lastTs }.maxOrNull()
+                total.firstTs = Instant.parse(session.started_at).toEpochMilliseconds()
+                total.lastTs  = session.ended_at?.let { Instant.parse(it).toEpochMilliseconds() }
+                    ?: stats.mapNotNull { it.lastTs }.maxOrNull()
                 appendLine(workerRow(total))
             }
         }
@@ -294,8 +299,7 @@ class MetricsExporter {
         return 2 * r * atan2(sqrt(a), sqrt(1 - a))
     }
 
-    private fun fmtTs(ms: Long): String =
-        Instant.fromEpochMilliseconds(ms).toString().replace("T", " ").take(19)
+    private fun fmtTs(iso: String): String = iso.take(19).replace("T", " ")
 
     private fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
 

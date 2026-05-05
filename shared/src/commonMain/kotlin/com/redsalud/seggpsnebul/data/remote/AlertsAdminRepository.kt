@@ -17,7 +17,7 @@ data class AlertAdminDto(
     val longitude: Double? = null,
     val is_attended: Boolean,
     val attended_by: String? = null,
-    val created_at: Long
+    val created_at: String
 )
 
 class AlertsAdminRepository {
