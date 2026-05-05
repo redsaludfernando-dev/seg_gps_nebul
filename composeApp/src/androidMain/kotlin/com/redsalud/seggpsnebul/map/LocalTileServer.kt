@@ -32,8 +32,21 @@ class LocalTileServer(private val pmtilesPath: String) {
             routing { setupRoutes(r) }
         }
         engine.start(wait = false)
+        awaitReady(freePort)
         port = freePort
         server = engine
+    }
+
+    private fun awaitReady(port: Int, maxMs: Long = 3_000) {
+        val deadline = System.currentTimeMillis() + maxMs
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                java.net.Socket("127.0.0.1", port).close()
+                return
+            } catch (_: Exception) {
+                Thread.sleep(50)
+            }
+        }
     }
 
     fun stop() {

@@ -10,7 +10,7 @@ import kotlin.uuid.Uuid
 @Serializable
 data class AssignmentDto(
     val id: String,
-    val session_id: String,
+    val session_id: String?,
     val assigned_to: String,
     val assigned_by: String,
     val block_name: String,
@@ -21,7 +21,7 @@ data class AssignmentDto(
 @Serializable
 private data class AssignmentInsertDto(
     val id: String,
-    val session_id: String,
+    val session_id: String?,
     val assigned_to: String,
     val assigned_by: String,
     val block_name: String,
@@ -40,9 +40,19 @@ class AssignmentsRepository {
             }
         }
 
+    suspend fun fetchAll(): Result<List<AssignmentDto>> =
+        withContext(Dispatchers.Default) {
+            runCatching {
+                supabaseClient.postgrest["block_assignments"]
+                    .select()
+                    .decodeList<AssignmentDto>()
+                    .sortedByDescending { it.assigned_at }
+            }
+        }
+
     @OptIn(ExperimentalUuidApi::class)
     suspend fun create(
-        sessionId: String,
+        sessionId: String?,
         assignedTo: String,
         assignedBy: String,
         blockName: String,

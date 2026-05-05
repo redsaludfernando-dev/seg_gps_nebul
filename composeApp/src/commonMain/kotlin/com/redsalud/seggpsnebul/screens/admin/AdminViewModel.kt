@@ -28,6 +28,9 @@ class AdminViewModel {
     private val _assignments = MutableStateFlow<List<AssignmentDto>>(emptyList())
     val assignments: StateFlow<List<AssignmentDto>> = _assignments.asStateFlow()
 
+    private val _allAssignments = MutableStateFlow<List<AssignmentDto>>(emptyList())
+    val allAssignments: StateFlow<List<AssignmentDto>> = _allAssignments.asStateFlow()
+
     private val _alerts = MutableStateFlow<List<AlertAdminDto>>(emptyList())
     val alerts: StateFlow<List<AlertAdminDto>> = _alerts.asStateFlow()
 
@@ -76,7 +79,7 @@ class AdminViewModel {
     private val _showTracks    = MutableStateFlow(true)
     val showTracks: StateFlow<Boolean> = _showTracks.asStateFlow()
 
-    init { loadAll(); loadZonas(); loadAllowedUsers() }
+    init { loadAll(); loadZonas(); loadAllowedUsers(); loadAllAssignments() }
 
     // ── Carga de datos ────────────────────────────────────────────────────────
 
@@ -234,32 +237,44 @@ class AdminViewModel {
         }
     }
 
-    fun createAssignment(
-        sessionId: String,
-        assignedTo: String,
-        assignedBy: String,
-        blockName: String,
-        notes: String?
-    ) {
+    fun loadAllAssignments() {
         scope.launch {
-            assignmentsRepo.create(sessionId, assignedTo, assignedBy, blockName, notes)
-                .onSuccess { _message.value = "Asignación creada"; loadAssignments(sessionId) }
-                .onFailure { _message.value = "Error: ${it.message}" }
+            assignmentsRepo.fetchAll()
+                .onSuccess { _allAssignments.value = it }
+                .onFailure { _message.value = "Error cargando asignaciones: ${it.message}" }
         }
     }
 
-    fun updateAssignment(id: String, sessionId: String, assignedTo: String, blockName: String, notes: String?) {
+    fun createAssignmentsBatch(workerIds: List<String>, manzanaNames: List<String>, notes: String?) {
+        scope.launch {
+            _isLoading.value = true
+            val adminProxy = _users.value.firstOrNull()?.id ?: ""
+            var failures = 0
+            for (workerId in workerIds) {
+                for (manzana in manzanaNames) {
+                    assignmentsRepo.create(null, workerId, adminProxy, manzana, notes)
+                        .onFailure { failures++; _message.value = "Error: ${it.message}" }
+                }
+            }
+            val total = workerIds.size * manzanaNames.size
+            if (failures == 0) _message.value = "$total asignación(es) creada(s)"
+            loadAllAssignments()
+            _isLoading.value = false
+        }
+    }
+
+    fun updateAssignment(id: String, assignedTo: String, blockName: String, notes: String?) {
         scope.launch {
             assignmentsRepo.update(id, assignedTo, blockName, notes)
-                .onSuccess { _message.value = "Asignación actualizada"; loadAssignments(sessionId) }
+                .onSuccess { _message.value = "Asignación actualizada"; loadAllAssignments() }
                 .onFailure { _message.value = "Error: ${it.message}" }
         }
     }
 
-    fun deleteAssignment(id: String, sessionId: String) {
+    fun deleteAssignment(id: String) {
         scope.launch {
             assignmentsRepo.delete(id)
-                .onSuccess { _message.value = "Asignación eliminada"; loadAssignments(sessionId) }
+                .onSuccess { _message.value = "Asignación eliminada"; loadAllAssignments() }
                 .onFailure { _message.value = "Error: ${it.message}" }
         }
     }

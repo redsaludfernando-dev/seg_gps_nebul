@@ -11,6 +11,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.google.gson.JsonObject
 import com.redsalud.seggpsnebul.data.remote.ZonaDto
 import com.redsalud.seggpsnebul.map.LocalTileServer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
@@ -42,12 +44,22 @@ actual @Composable fun MapLibreView(
     myPosition: UserPosition?,
     zonas: List<ZonaDto>
 ) {
-    val tileServer = remember {
-        pmtilesPath?.let {
-            runCatching { LocalTileServer(it).also { s -> s.start() } }.getOrNull()
+    var tileServer by remember { mutableStateOf<LocalTileServer?>(null) }
+    val mapHolder  = remember { MapHolder() }
+
+    DisposableEffect(pmtilesPath) {
+        onDispose { tileServer?.stop(); tileServer = null }
+    }
+
+    // Start the tile server on IO — avoids blocking the main thread and ensures
+    // the server is truly accepting connections before MapLibre requests tiles.
+    LaunchedEffect(pmtilesPath) {
+        tileServer = null
+        if (pmtilesPath == null) return@LaunchedEffect
+        tileServer = withContext(Dispatchers.IO) {
+            runCatching { LocalTileServer(pmtilesPath).also { it.start() } }.getOrNull()
         }
     }
-    DisposableEffect(Unit) { onDispose { tileServer?.stop() } }
 
     val positionsRef = remember { mutableStateOf<List<UserPosition>>(emptyList()) }
     val zonasRef     = remember { mutableStateOf<List<ZonaDto>>(emptyList()) }
@@ -57,8 +69,16 @@ actual @Composable fun MapLibreView(
     }
     LaunchedEffect(zonas) { zonasRef.value = zonas }
 
+    // If the server became ready after the map was already loaded, upgrade the style.
+    LaunchedEffect(tileServer) {
+        val server = tileServer ?: return@LaunchedEffect
+        val map    = mapHolder.map ?: return@LaunchedEffect
+        map.setStyle(Style.Builder().fromJson(buildStyleJson(server))) { style ->
+            applyMapLayers(style, positionsRef, zonasRef)
+        }
+    }
+
     var selectedUser by remember { mutableStateOf<UserPosition?>(null) }
-    val mapHolder    = remember { MapHolder() }
 
     Box(modifier) {
         AndroidView(
@@ -67,58 +87,20 @@ actual @Composable fun MapLibreView(
                 MapView(ctx).apply {
                     getMapAsync { map ->
                         mapHolder.map = map
+                        map.cameraPosition = CameraPosition.Builder()
+                            .target(RIOJA_CENTER).zoom(DEFAULT_ZOOM).build()
                         map.setStyle(Style.Builder().fromJson(buildStyleJson(tileServer))) { style ->
-                            map.cameraPosition = CameraPosition.Builder()
-                                .target(RIOJA_CENTER).zoom(DEFAULT_ZOOM).build()
-
-                            // ── Fuente + capas de zonas/manzanas ───────────────────────
-                            style.addSource(GeoJsonSource(ZONES_SOURCE, FeatureCollection.fromFeatures(emptyList())))
-                            // Relleno semitransparente
-                            style.addLayer(
-                                FillLayer(ZONES_FILL, ZONES_SOURCE).withProperties(
-                                    fillColor(get("color")),
-                                    fillOpacity(0.18f)
-                                )
-                            )
-                            // Contorno
-                            style.addLayer(
-                                LineLayer(ZONES_LINE, ZONES_SOURCE).withProperties(
-                                    lineColor(get("color")),
-                                    lineWidth(2.2f),
-                                    lineOpacity(0.85f)
-                                )
-                            )
-
-                            // ── Fuente + capa de usuarios (encima de zonas) ─────────────
-                            style.addSource(GeoJsonSource(SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
-                            style.addLayer(
-                                CircleLayer(LAYER_CIRCLES, SOURCE_ID).withProperties(
-                                    circleRadius(9f),
-                                    circleColor(get("color")),
-                                    circleStrokeWidth(2f),
-                                    circleStrokeColor("#ffffff")
-                                )
-                            )
-
-                            // Render inmediato si hay datos
-                            positionsRef.value.takeIf { it.isNotEmpty() }?.let {
-                                style.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(buildFeatureCollection(it))
-                            }
-                            zonasRef.value.takeIf { it.isNotEmpty() }?.let {
-                                style.getSourceAs<GeoJsonSource>(ZONES_SOURCE)?.setGeoJson(buildZonesCollection(it))
-                            }
-
-                            // Tap → popup de usuario
-                            map.addOnMapClickListener { latLng ->
-                                val pt = map.projection.toScreenLocation(latLng)
-                                val features = map.queryRenderedFeatures(pt, LAYER_CIRCLES)
-                                if (features.isNotEmpty()) {
-                                    val uid = features[0].getStringProperty("userId") ?: ""
-                                    selectedUser = positionsRef.value.find { it.userId == uid }
-                                    selectedUser != null
-                                } else {
-                                    selectedUser = null; false
-                                }
+                            applyMapLayers(style, positionsRef, zonasRef)
+                        }
+                        map.addOnMapClickListener { latLng ->
+                            val pt       = map.projection.toScreenLocation(latLng)
+                            val features = map.queryRenderedFeatures(pt, LAYER_CIRCLES)
+                            if (features.isNotEmpty()) {
+                                val uid = features[0].getStringProperty("userId") ?: ""
+                                selectedUser = positionsRef.value.find { it.userId == uid }
+                                selectedUser != null
+                            } else {
+                                selectedUser = null; false
                             }
                         }
                         onCreate(null)
@@ -142,6 +124,42 @@ actual @Composable fun MapLibreView(
                 onDismiss = { selectedUser = null }
             )
         }
+    }
+}
+
+private fun applyMapLayers(
+    style: Style,
+    positionsRef: State<List<UserPosition>>,
+    zonasRef: State<List<ZonaDto>>
+) {
+    style.addSource(GeoJsonSource(ZONES_SOURCE, FeatureCollection.fromFeatures(emptyList())))
+    style.addLayer(
+        FillLayer(ZONES_FILL, ZONES_SOURCE).withProperties(
+            fillColor(get("color")),
+            fillOpacity(0.18f)
+        )
+    )
+    style.addLayer(
+        LineLayer(ZONES_LINE, ZONES_SOURCE).withProperties(
+            lineColor(get("color")),
+            lineWidth(2.2f),
+            lineOpacity(0.85f)
+        )
+    )
+    style.addSource(GeoJsonSource(SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
+    style.addLayer(
+        CircleLayer(LAYER_CIRCLES, SOURCE_ID).withProperties(
+            circleRadius(9f),
+            circleColor(get("color")),
+            circleStrokeWidth(2f),
+            circleStrokeColor("#ffffff")
+        )
+    )
+    positionsRef.value.takeIf { it.isNotEmpty() }?.let {
+        style.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(buildFeatureCollection(it))
+    }
+    zonasRef.value.takeIf { it.isNotEmpty() }?.let {
+        style.getSourceAs<GeoJsonSource>(ZONES_SOURCE)?.setGeoJson(buildZonesCollection(it))
     }
 }
 

@@ -1,5 +1,7 @@
 package com.redsalud.seggpsnebul.screens.admin
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -8,99 +10,54 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.redsalud.seggpsnebul.data.remote.AssignmentDto
-import com.redsalud.seggpsnebul.data.remote.SessionAdminDto
 import com.redsalud.seggpsnebul.data.remote.UserAdminDto
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AsignacionesTab(vm: AdminViewModel) {
-    val sessions    by vm.sessions.collectAsState()
     val users       by vm.users.collectAsState()
-    val assignments by vm.assignments.collectAsState()
+    val assignments by vm.allAssignments.collectAsState()
     val zonas       by vm.zonas.collectAsState()
 
-    var selectedSessionId by remember { mutableStateOf<String?>(null) }
-    var sessionMenuOpen   by remember { mutableStateOf(false) }
-    var creating          by remember { mutableStateOf(false) }
-    var editing           by remember { mutableStateOf<AssignmentDto?>(null) }
-    var deleting          by remember { mutableStateOf<AssignmentDto?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    var editing  by remember { mutableStateOf<AssignmentDto?>(null) }
+    var deleting by remember { mutableStateOf<AssignmentDto?>(null) }
 
-    LaunchedEffect(sessions) {
-        if (selectedSessionId == null && sessions.isNotEmpty()) {
-            selectedSessionId = sessions.firstOrNull { it.is_active }?.id ?: sessions.first().id
-        }
-    }
-    LaunchedEffect(selectedSessionId) {
-        selectedSessionId?.let { vm.loadAssignments(it) }
-    }
+    LaunchedEffect(Unit) { vm.loadAllAssignments() }
 
-    val selectedSession = sessions.firstOrNull { it.id == selectedSessionId }
-    val nebulizadores   = users.filter { it.role == "nebulizador" || it.role == "anotador" }
-    val usersById       = remember(users) { users.associateBy { it.id } }
+    val usersById = remember(users) { users.associateBy { it.id } }
 
     Column(Modifier.fillMaxSize()) {
-        // Selector de jornada
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            ExposedDropdownMenuBox(
-                expanded         = sessionMenuOpen,
-                onExpandedChange = { sessionMenuOpen = !sessionMenuOpen },
-                modifier         = Modifier.weight(1f)
-            ) {
-                OutlinedTextField(
-                    value         = selectedSession?.let { "${if (it.is_active) "🟢 " else ""}${it.name}" } ?: "Selecciona jornada",
-                    onValueChange = {},
-                    readOnly      = true,
-                    label         = { Text("Jornada") },
-                    trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(sessionMenuOpen) },
-                    modifier      = Modifier.fillMaxWidth().menuAnchor()
-                )
-                ExposedDropdownMenu(
-                    expanded         = sessionMenuOpen,
-                    onDismissRequest = { sessionMenuOpen = false }
-                ) {
-                    sessions.forEach { s ->
-                        DropdownMenuItem(
-                            text    = { Text("${if (s.is_active) "🟢 " else ""}${s.name}") },
-                            onClick = {
-                                selectedSessionId = s.id
-                                sessionMenuOpen = false
-                            }
-                        )
-                    }
-                }
-            }
+            Text(
+                "${assignments.size} asignaciones",
+                style = MaterialTheme.typography.labelMedium
+            )
             Button(
-                onClick = { creating = true },
-                enabled = selectedSessionId != null && nebulizadores.isNotEmpty()
+                onClick  = { creating = true },
+                enabled  = users.isNotEmpty()
             ) { Text("+ Asignar") }
         }
 
-        // Resumen
-        Text(
-            "${assignments.size} manzanas asignadas en esta jornada",
-            style    = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-
-        if (selectedSessionId == null) {
+        if (users.isEmpty()) {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text("Selecciona una jornada para ver/crear asignaciones.",
-                    style = MaterialTheme.typography.bodyMedium)
-            }
-        } else if (nebulizadores.isEmpty()) {
-            Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text("Crea trabajadores con rol nebulizador o anotador para asignar manzanas.",
-                    style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Crea trabajadores para poder asignar manzanas.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         } else if (assignments.isEmpty()) {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text("Sin asignaciones. Pulsa + Asignar.",
-                    style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Sin asignaciones. Pulsa + Asignar para asignar manzanas a trabajadores.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         } else {
             LazyColumn(
@@ -120,35 +77,29 @@ fun AsignacionesTab(vm: AdminViewModel) {
         }
     }
 
-    if (creating && selectedSessionId != null) {
-        AssignmentDialog(
-            title       = "Nueva asignación",
-            initialUser = nebulizadores.firstOrNull()?.id,
-            initialBlock = "",
-            initialNotes = "",
-            users       = nebulizadores,
-            zonaNames   = zonas.map { it.nombre },
-            onDismiss   = { creating = false },
-            onSubmit    = { userId, blockName, notes ->
-                // assignedBy: usar el primer user disponible (no hay un user.id de admin real)
-                val adminProxy = users.firstOrNull()?.id ?: userId
-                vm.createAssignment(selectedSessionId!!, userId, adminProxy, blockName, notes)
+    if (creating) {
+        BatchAssignmentDialog(
+            users     = users,
+            zonaNames = zonas.map { it.nombre },
+            onDismiss = { creating = false },
+            onSubmit  = { workerIds, manzanas, notes ->
+                vm.createAssignmentsBatch(workerIds, manzanas, notes)
                 creating = false
             }
         )
     }
 
     editing?.let { a ->
-        AssignmentDialog(
-            title       = "Editar asignación",
-            initialUser = a.assigned_to,
+        SingleAssignmentDialog(
+            title        = "Editar asignación",
+            initialUser  = a.assigned_to,
             initialBlock = a.block_name,
             initialNotes = a.notes ?: "",
-            users       = nebulizadores,
-            zonaNames   = zonas.map { it.nombre },
-            onDismiss   = { editing = null },
-            onSubmit    = { userId, blockName, notes ->
-                vm.updateAssignment(a.id, a.session_id, userId, blockName, notes)
+            users        = users,
+            zonaNames    = zonas.map { it.nombre },
+            onDismiss    = { editing = null },
+            onSubmit     = { userId, blockName, notes ->
+                vm.updateAssignment(a.id, userId, blockName, notes)
                 editing = null
             }
         )
@@ -161,7 +112,7 @@ fun AsignacionesTab(vm: AdminViewModel) {
             text  = { Text("¿Eliminar la asignación de '${a.block_name}'?") },
             confirmButton = {
                 TextButton(
-                    onClick = { vm.deleteAssignment(a.id, a.session_id); deleting = null },
+                    onClick = { vm.deleteAssignment(a.id); deleting = null },
                     colors  = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Eliminar") }
             },
@@ -215,9 +166,154 @@ private fun AssignmentCard(
     }
 }
 
+@Composable
+private fun BatchAssignmentDialog(
+    users: List<UserAdminDto>,
+    zonaNames: List<String>,
+    onDismiss: () -> Unit,
+    onSubmit: (workerIds: List<String>, manzanas: List<String>, notes: String?) -> Unit
+) {
+    var selectedWorkers  by remember { mutableStateOf(setOf<String>()) }
+    var selectedManzanas by remember { mutableStateOf(setOf<String>()) }
+    var manzanaQuery     by remember { mutableStateOf("") }
+    var notes            by remember { mutableStateOf("") }
+
+    val filteredZonas = remember(manzanaQuery, zonaNames) {
+        zonaNames.filter { manzanaQuery.isBlank() || it.contains(manzanaQuery, ignoreCase = true) }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape    = MaterialTheme.shapes.large,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(24.dp)) {
+                Text("Nueva asignación", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(16.dp))
+
+                // Workers
+                Text("Trabajadores *", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(4.dp))
+                LazyColumn(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+                ) {
+                    items(users) { u ->
+                        val checked = u.id in selectedWorkers
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedWorkers = if (checked) selectedWorkers - u.id
+                                    else selectedWorkers + u.id
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked         = checked,
+                                onCheckedChange = {
+                                    selectedWorkers = if (it) selectedWorkers + u.id
+                                    else selectedWorkers - u.id
+                                }
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Column {
+                                Text(u.full_name, style = MaterialTheme.typography.bodyMedium)
+                                Text(roleLabel(u.role), style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Manzanas
+                Text("Manzanas *", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value         = manzanaQuery,
+                    onValueChange = { manzanaQuery = it },
+                    placeholder   = { Text("Buscar manzana…") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(4.dp))
+                LazyColumn(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+                ) {
+                    items(filteredZonas) { z ->
+                        val checked = z in selectedManzanas
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedManzanas = if (checked) selectedManzanas - z
+                                    else selectedManzanas + z
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked         = checked,
+                                onCheckedChange = {
+                                    selectedManzanas = if (it) selectedManzanas + z
+                                    else selectedManzanas - z
+                                }
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(z, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value         = notes,
+                    onValueChange = { notes = it },
+                    label         = { Text("Notas (opcional)") },
+                    minLines      = 2,
+                    modifier      = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Cancelar") }
+                    Spacer(Modifier.width(8.dp))
+                    val count = selectedWorkers.size * selectedManzanas.size
+                    Button(
+                        onClick  = {
+                            onSubmit(
+                                selectedWorkers.toList(),
+                                selectedManzanas.toList(),
+                                notes.takeIf { it.isNotBlank() }
+                            )
+                        },
+                        enabled  = selectedWorkers.isNotEmpty() && selectedManzanas.isNotEmpty()
+                    ) {
+                        Text(if (count > 0) "Asignar ($count)" else "Asignar")
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AssignmentDialog(
+private fun SingleAssignmentDialog(
     title: String,
     initialUser: String?,
     initialBlock: String,
@@ -227,10 +323,10 @@ private fun AssignmentDialog(
     onDismiss: () -> Unit,
     onSubmit: (userId: String, blockName: String, notes: String?) -> Unit
 ) {
-    var userId    by remember { mutableStateOf(initialUser ?: users.firstOrNull()?.id ?: "") }
-    var blockName by remember { mutableStateOf(initialBlock) }
-    var notes     by remember { mutableStateOf(initialNotes) }
-    var userMenuOpen by remember { mutableStateOf(false) }
+    var userId       by remember { mutableStateOf(initialUser ?: users.firstOrNull()?.id ?: "") }
+    var blockName    by remember { mutableStateOf(initialBlock) }
+    var notes        by remember { mutableStateOf(initialNotes) }
+    var userMenuOpen  by remember { mutableStateOf(false) }
     var blockMenuOpen by remember { mutableStateOf(false) }
 
     val selectedName = users.firstOrNull { it.id == userId }?.full_name ?: ""
@@ -307,8 +403,8 @@ private fun AssignmentDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSubmit(userId, blockName, notes.takeIf { it.isNotBlank() }) },
-                enabled = userId.isNotBlank() && blockName.isNotBlank()
+                onClick  = { onSubmit(userId, blockName, notes.takeIf { it.isNotBlank() }) },
+                enabled  = userId.isNotBlank() && blockName.isNotBlank()
             ) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
