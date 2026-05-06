@@ -95,6 +95,7 @@ class RoleViewModel(val currentUser: User) {
         }
         _message.value = "Jornada iniciada"
         refresh()
+        scope.launch { AppContainer.syncManager.syncAll() }
     }
 
     fun endSession() {
@@ -105,6 +106,7 @@ class RoleViewModel(val currentUser: User) {
         AppContainer.realtimeRepository.unsubscribeAll()
         _message.value = "Jornada finalizada"
         refresh()
+        scope.launch { AppContainer.syncManager.syncAll() }
     }
 
     // ── Alerts ────────────────────────────────────────────────────────────────
@@ -126,8 +128,8 @@ class RoleViewModel(val currentUser: User) {
             createdAt  = Clock.System.now().toEpochMilliseconds()
         )
         _message.value = "Alerta enviada: ${type.label}"
-        AppContainer.syncManager.refreshCounts()
         refresh()
+        scope.launch { AppContainer.syncManager.syncAll() }
     }
 
     fun markAlertAttended(alertId: String) {

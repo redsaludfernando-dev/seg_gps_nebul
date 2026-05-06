@@ -26,14 +26,56 @@ class AuthRepository(
         @SerialName("phone_number") val phoneNumber: String
     )
 
+    @Serializable
+    private data class UserRow(
+        val id: String,
+        val dni: String,
+        val phone_number: String,
+        val full_name: String,
+        val role: String,
+        val pin: String,
+        val device_id: String? = null,
+        val is_active: Boolean
+    )
+
     suspend fun loginWorker(dni: String, pin: String): AuthResult {
+        // Try local first; fall back to Supabase (e.g., after reinstall)
         val user = local.getUserByDni(dni)
+            ?: fetchAndCacheFromSupabase(dni)
+            ?: return AuthResult.Error("DNI no registrado. Si ya se inscribió, asegúrese de tener conexión a internet.")
         return when {
-            user == null                     -> AuthResult.Error("DNI no registrado en este dispositivo")
             !PinHasher.verify(pin, user.pin) -> AuthResult.Error("PIN incorrecto")
             !user.isActive                   -> AuthResult.Error("Usuario desactivado. Contacte al administrador.")
             else                             -> AuthResult.WorkerSuccess(user)
         }
+    }
+
+    @OptIn(ExperimentalTime::class)
+    private suspend fun fetchAndCacheFromSupabase(dni: String): User? = try {
+        val row = supabaseClient.postgrest["users"]
+            .select { filter { eq("dni", dni) } }
+            .decodeList<UserRow>()
+            .firstOrNull() ?: return null
+        if (!row.is_active) return null
+
+        val deviceId = DeviceIdProvider.getDeviceId()
+        local.insertUser(
+            row.id, row.dni, row.phone_number, row.full_name,
+            row.role, row.pin, deviceId,
+            Clock.System.now().toEpochMilliseconds()
+        )
+        User(
+            id          = row.id,
+            dni         = row.dni,
+            phoneNumber = row.phone_number,
+            fullName    = row.full_name,
+            role        = UserRole.fromString(row.role),
+            pin         = row.pin,
+            deviceId    = deviceId,
+            isActive    = true
+        )
+    } catch (_: Exception) {
+        null
     }
 
     suspend fun loginAdmin(email: String, password: String): AuthResult = try {

@@ -17,8 +17,10 @@ import com.redsalud.seggpsnebul.domain.model.UserRole
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 actual object AppContainer {
@@ -73,10 +75,15 @@ actual object AppContainer {
 
     private fun observeConnectivity() {
         scope.launch {
+            // collectLatest cancels the previous block when isOnline changes,
+            // so the periodic loop stops automatically when going offline.
             _connectivityObserver.isOnline.collectLatest { online ->
-                if (online) {
-                    realtimeRepository.connect()
-                    currentSessionId.value?.let { realtimeRepository.subscribeToSession(it) }
+                if (!online) return@collectLatest
+                realtimeRepository.connect()
+                currentSessionId.value?.let { realtimeRepository.subscribeToSession(it) }
+                _syncManager.syncAll()
+                while (isActive) {
+                    delay(60_000)
                     _syncManager.syncAll()
                 }
             }
