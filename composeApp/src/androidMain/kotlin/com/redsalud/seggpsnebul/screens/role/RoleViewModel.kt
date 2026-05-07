@@ -3,6 +3,8 @@ package com.redsalud.seggpsnebul.screens.role
 import com.redsalud.seggpsnebul.AppContainer
 import com.redsalud.seggpsnebul.data.local.Alerts
 import com.redsalud.seggpsnebul.data.local.Block_assignments
+import com.redsalud.seggpsnebul.data.remote.ZonaDto
+import com.redsalud.seggpsnebul.data.remote.ZonasRepository
 import com.redsalud.seggpsnebul.domain.model.AlertType
 import com.redsalud.seggpsnebul.domain.model.User
 import com.redsalud.seggpsnebul.map.PmTilesManager
@@ -17,6 +19,7 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 class RoleViewModel(val currentUser: User) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val zonasRepo = ZonasRepository()
 
     // ── PMTiles ──────────────────────────────────────────────────────────────
     private val _pmTilesState = MutableStateFlow<PmTilesState>(
@@ -59,6 +62,10 @@ class RoleViewModel(val currentUser: User) {
     private val _myPosition = MutableStateFlow<UserPosition?>(null)
     val myPosition: StateFlow<UserPosition?> = _myPosition.asStateFlow()
 
+    // ── Zonas (manzanas vectoriales) ──────────────────────────────────────────
+    private val _zonas = MutableStateFlow<List<ZonaDto>>(emptyList())
+    val zonas: StateFlow<List<ZonaDto>> = _zonas.asStateFlow()
+
     // ── Snackbar messages ─────────────────────────────────────────────────────
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -86,6 +93,13 @@ class RoleViewModel(val currentUser: User) {
         pollData()
         subscribeToRealtimeAlerts()
         subscribeToRealtimeAssignments()
+        loadZonas()
+    }
+
+    private fun loadZonas() {
+        scope.launch {
+            zonasRepo.fetchZonas().onSuccess { _zonas.value = it }
+        }
     }
 
     // ── Session control ───────────────────────────────────────────────────────

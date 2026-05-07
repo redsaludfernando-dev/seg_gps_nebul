@@ -1,13 +1,20 @@
 package com.redsalud.seggpsnebul.screens.map
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.gson.JsonObject
 import com.redsalud.seggpsnebul.data.remote.ZonaDto
 import com.redsalud.seggpsnebul.map.LocalTileServer
@@ -81,6 +88,9 @@ actual @Composable fun MapLibreView(
 
     var selectedUser by remember { mutableStateOf<UserPosition?>(null) }
 
+    val context     = LocalContext.current
+    val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
     Box(modifier) {
         AndroidView(
             factory = { ctx ->
@@ -118,14 +128,38 @@ actual @Composable fun MapLibreView(
             modifier = Modifier.fillMaxSize()
         )
 
-        // FAB "mi ubicacion": centra la camara en myPosition (zoom 17). Si todavia
-        // no hay fix GPS, vuelve al centro de Rioja.
+        // FAB "mi ubicacion": prefiere myPosition (track del foreground service);
+        // si no hay fix todavia (sin jornada activa o GPS recien arrancado),
+        // pide un getCurrentLocation one-shot al FusedLocationProviderClient.
         FloatingActionButton(
             onClick  = {
                 val map = mapHolder.map ?: return@FloatingActionButton
-                val target = myPosition?.let { LatLng(it.latitude, it.longitude) } ?: RIOJA_CENTER
-                val zoom = if (myPosition != null) 17.0 else DEFAULT_ZOOM
-                map.animateCamera(CameraUpdateFactory.newLatLngZoom(target, zoom))
+                val mp  = myPosition
+                if (mp != null) {
+                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(mp.latitude, mp.longitude), 17.0))
+                    return@FloatingActionButton
+                }
+                val granted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+                if (!granted) {
+                    Toast.makeText(context, "Falta permiso de ubicación", Toast.LENGTH_SHORT).show()
+                    return@FloatingActionButton
+                }
+                @Suppress("MissingPermission")
+                fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener { loc ->
+                        if (loc != null) {
+                            map.animateCamera(
+                                CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 17.0)
+                            )
+                        } else {
+                            Toast.makeText(context, "Sin señal GPS aún. Prueba al aire libre.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .addOnFailureListener {
+                        Toast.makeText(context, "Error obteniendo ubicación", Toast.LENGTH_SHORT).show()
+                    }
             },
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
             containerColor = MaterialTheme.colorScheme.primaryContainer

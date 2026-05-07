@@ -23,6 +23,7 @@ fun AnotadorScreen(vm: RoleViewModel, onLogout: () -> Unit) {
     val myPosition    by vm.myPosition.collectAsState()
     val myBlock       by vm.myBlock.collectAsState()
     val allAlerts     by vm.allAlerts.collectAsState()
+    val zonas         by vm.zonas.collectAsState()
     
     val message       by vm.message.collectAsState()
 
@@ -61,7 +62,8 @@ fun AnotadorScreen(vm: RoleViewModel, onLogout: () -> Unit) {
                         modifier      = Modifier.fillMaxSize(),
                         pmtilesPath   = PmTilesManager.localPath(),
                         userPositions = userPositions,
-                        myPosition    = myPosition
+                        myPosition    = myPosition,
+                        zonas         = zonas
                     )
                 }
             }

@@ -29,6 +29,7 @@ fun JefeScreen(vm: RoleViewModel, onLogout: () -> Unit) {
     val allBlocks     by vm.allBlocks.collectAsState()
     val isOnline      by vm.isOnline.collectAsState()
     val message       by vm.message.collectAsState()
+    val zonas         by vm.zonas.collectAsState()
 
     var selectedTab    by remember { mutableStateOf(JefeTab.MAPA) }
     var showStartDialog by remember { mutableStateOf(false) }
@@ -98,7 +99,8 @@ fun JefeScreen(vm: RoleViewModel, onLogout: () -> Unit) {
                                 modifier      = Modifier.fillMaxSize(),
                                 pmtilesPath   = PmTilesManager.localPath(),
                                 userPositions = userPositions,
-                                myPosition    = myPosition
+                                myPosition    = myPosition,
+                                zonas         = zonas
                             )
                         }
                     }

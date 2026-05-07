@@ -73,6 +73,13 @@ class MainActivity : ComponentActivity() {
         startForegroundService(intent)
     }
 
-    private fun UserRole.needsGps(): Boolean =
-        this == UserRole.JEFE_BRIGADA || this == UserRole.NEBULIZADOR || this == UserRole.CHOFER
+    // Toda la brigada en campo captura GPS+IMU: jefe coordina, nebulizador rocia,
+    // anotador anota lo nebulizado, chofer abastece. El admin web es el unico
+    // rol sin captura.
+    private fun UserRole.needsGps(): Boolean = when (this) {
+        UserRole.JEFE_BRIGADA,
+        UserRole.NEBULIZADOR,
+        UserRole.ANOTADOR,
+        UserRole.CHOFER -> true
+    }
 }

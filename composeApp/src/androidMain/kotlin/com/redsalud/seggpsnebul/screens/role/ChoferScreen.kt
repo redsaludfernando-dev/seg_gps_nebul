@@ -26,6 +26,7 @@ fun ChoferScreen(vm: RoleViewModel, onLogout: () -> Unit) {
     val myPosition    by vm.myPosition.collectAsState()
     val isOnline      by vm.isOnline.collectAsState()
     val message       by vm.message.collectAsState()
+    val zonas         by vm.zonas.collectAsState()
 
     var selectedTab by remember { mutableStateOf(ChoferTab.SOLICITUDES) }
 
@@ -135,7 +136,8 @@ fun ChoferScreen(vm: RoleViewModel, onLogout: () -> Unit) {
                                 modifier      = Modifier.fillMaxSize(),
                                 pmtilesPath   = PmTilesManager.localPath(),
                                 userPositions = userPositions,
-                                myPosition    = myPosition
+                                myPosition    = myPosition,
+                                zonas         = zonas
                             )
                         }
                     }

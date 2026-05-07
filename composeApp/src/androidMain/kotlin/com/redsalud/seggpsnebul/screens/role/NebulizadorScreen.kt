@@ -18,7 +18,8 @@ fun NebulizadorScreen(vm: RoleViewModel, onLogout: () -> Unit) {
     val sessionActive by vm.sessionActive.collectAsState()
     val userPositions by vm.userPositions.collectAsState()
     val myPosition    by vm.myPosition.collectAsState()
-    
+    val zonas         by vm.zonas.collectAsState()
+
     val message       by vm.message.collectAsState()
 
     var showStartDialog by remember { mutableStateOf(false) }
@@ -60,7 +61,8 @@ fun NebulizadorScreen(vm: RoleViewModel, onLogout: () -> Unit) {
                         modifier      = Modifier.fillMaxSize(),
                         pmtilesPath   = PmTilesManager.localPath(),
                         userPositions = userPositions,
-                        myPosition    = myPosition
+                        myPosition    = myPosition,
+                        zonas         = zonas
                     )
                 }
             }
