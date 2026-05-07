@@ -24,6 +24,10 @@ import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentOptions
+import org.maplibre.android.location.modes.CameraMode
+import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -32,10 +36,12 @@ import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory.*
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
+import org.maplibre.geojson.Polygon as GjPolygon
 
 private val RIOJA_CENTER      = LatLng(-6.058, -77.160)
 private const val DEFAULT_ZOOM  = 14.0
@@ -44,6 +50,8 @@ private const val LAYER_CIRCLES = "users-circles"
 private const val ZONES_SOURCE  = "zones-source"
 private const val ZONES_FILL    = "zones-fill"
 private const val ZONES_LINE    = "zones-line"
+private const val ZONES_LABELS_SOURCE = "zones-labels-source"
+private const val ZONES_LABELS_LAYER  = "zones-labels"
 
 actual @Composable fun MapLibreView(
     modifier: Modifier,
@@ -77,19 +85,21 @@ actual @Composable fun MapLibreView(
     }
     LaunchedEffect(zonas) { zonasRef.value = zonas }
 
-    // If the server became ready after the map was already loaded, upgrade the style.
+    var selectedUser by remember { mutableStateOf<UserPosition?>(null) }
+
+    val context     = LocalContext.current
+    val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    // If the server became ready after the map was already loaded, upgrade the style
+    // and re-activate LocationComponent (LocationComponent is style-bound).
     LaunchedEffect(tileServer) {
         val server = tileServer ?: return@LaunchedEffect
         val map    = mapHolder.map ?: return@LaunchedEffect
         map.setStyle(Style.Builder().fromJson(buildStyleJson(server))) { style ->
             applyMapLayers(style, positionsRef, zonasRef)
+            enableLocationComponent(context, map, style)
         }
     }
-
-    var selectedUser by remember { mutableStateOf<UserPosition?>(null) }
-
-    val context     = LocalContext.current
-    val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     Box(modifier) {
         AndroidView(
@@ -102,6 +112,7 @@ actual @Composable fun MapLibreView(
                             .target(RIOJA_CENTER).zoom(DEFAULT_ZOOM).build()
                         map.setStyle(Style.Builder().fromJson(buildStyleJson(tileServer))) { style ->
                             applyMapLayers(style, positionsRef, zonasRef)
+                            enableLocationComponent(ctx, map, style)
                         }
                         map.addOnMapClickListener { latLng ->
                             val pt       = map.projection.toScreenLocation(latLng)
@@ -124,6 +135,8 @@ actual @Composable fun MapLibreView(
                     ?.setGeoJson(buildFeatureCollection(positionsRef.value))
                 style.getSourceAs<GeoJsonSource>(ZONES_SOURCE)
                     ?.setGeoJson(buildZonesCollection(zonasRef.value))
+                style.getSourceAs<GeoJsonSource>(ZONES_LABELS_SOURCE)
+                    ?.setGeoJson(buildZoneLabelsCollection(zonasRef.value))
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -177,6 +190,40 @@ actual @Composable fun MapLibreView(
     }
 }
 
+/**
+ * Activa el puck de "mi ubicacion" estilo Google Maps. Sin permiso ACCESS_FINE_LOCATION
+ * el componente queda inactivo silenciosamente. Es seguro llamarlo varias veces (cada
+ * vez que se reaplica el style) — MapLibre re-vincula el componente al nuevo style.
+ */
+private fun enableLocationComponent(
+    context: android.content.Context,
+    map: MapLibreMap,
+    style: Style
+) {
+    val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+        context, android.Manifest.permission.ACCESS_FINE_LOCATION
+    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    if (!granted) return
+    runCatching {
+        val options = LocationComponentOptions.builder(context)
+            .pulseEnabled(true)
+            .accuracyAnimationEnabled(true)
+            .build()
+        val activation = LocationComponentActivationOptions.builder(context, style)
+            .locationComponentOptions(options)
+            .useDefaultLocationEngine(true)
+            .build()
+        with(map.locationComponent) {
+            @Suppress("MissingPermission")
+            activateLocationComponent(activation)
+            @Suppress("MissingPermission")
+            isLocationComponentEnabled = true
+            cameraMode = CameraMode.NONE
+            renderMode = RenderMode.COMPASS
+        }
+    }
+}
+
 private fun applyMapLayers(
     style: Style,
     positionsRef: State<List<UserPosition>>,
@@ -196,6 +243,20 @@ private fun applyMapLayers(
             lineOpacity(0.85f)
         )
     )
+    // Etiquetas de zona (MZ A, MZ B…) en el centroide del poligono.
+    style.addSource(GeoJsonSource(ZONES_LABELS_SOURCE, FeatureCollection.fromFeatures(emptyList())))
+    style.addLayer(
+        SymbolLayer(ZONES_LABELS_LAYER, ZONES_LABELS_SOURCE).withProperties(
+            textField(get("nombre")),
+            textFont(arrayOf("Open Sans Regular")),
+            textSize(13f),
+            textColor("#1a1a1a"),
+            textHaloColor("#ffffff"),
+            textHaloWidth(1.6f),
+            textAllowOverlap(true),
+            textIgnorePlacement(true)
+        )
+    )
     style.addSource(GeoJsonSource(SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
     style.addLayer(
         CircleLayer(LAYER_CIRCLES, SOURCE_ID).withProperties(
@@ -208,8 +269,9 @@ private fun applyMapLayers(
     positionsRef.value.takeIf { it.isNotEmpty() }?.let {
         style.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(buildFeatureCollection(it))
     }
-    zonasRef.value.takeIf { it.isNotEmpty() }?.let {
-        style.getSourceAs<GeoJsonSource>(ZONES_SOURCE)?.setGeoJson(buildZonesCollection(it))
+    zonasRef.value.takeIf { it.isNotEmpty() }?.let { zonas ->
+        style.getSourceAs<GeoJsonSource>(ZONES_SOURCE)?.setGeoJson(buildZonesCollection(zonas))
+        style.getSourceAs<GeoJsonSource>(ZONES_LABELS_SOURCE)?.setGeoJson(buildZoneLabelsCollection(zonas))
     }
 }
 
@@ -276,6 +338,26 @@ private fun buildZonesCollection(zonas: List<ZonaDto>): FeatureCollection {
     return FeatureCollection.fromFeatures(features)
 }
 
+/** Genera un Feature de tipo Point en el centroide de cada poligono, con la propiedad nombre. */
+private fun buildZoneLabelsCollection(zonas: List<ZonaDto>): FeatureCollection {
+    val features = zonas.mapNotNull { zona ->
+        runCatching {
+            val poly = GjPolygon.fromJson(zona.geojson.toString())
+            val ring = poly.outer().coordinates()
+            if (ring.size < 3) return@runCatching null
+            // Centroide simple: media de las coordenadas del anillo exterior. Para poligonos
+            // convexos pequeños como manzanas urbanas es indistinguible del centroide real.
+            var sumLng = 0.0; var sumLat = 0.0
+            for (p in ring) { sumLng += p.longitude(); sumLat += p.latitude() }
+            val cx = sumLng / ring.size
+            val cy = sumLat / ring.size
+            val props = JsonObject().apply { addProperty("nombre", zona.nombre) }
+            Feature.fromGeometry(Point.fromLngLat(cx, cy), props)
+        }.getOrNull()
+    }
+    return FeatureCollection.fromFeatures(features)
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 private fun roleColor(role: String) = when (role) {
@@ -317,6 +399,7 @@ private fun omtStyle(tilesUrl: String, minZoom: Int, maxZoom: Int) = """
 {
   "version": 8,
   "name": "Rioja GPS",
+  "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   "sources": {
     "omt": {
       "type": "vector",
