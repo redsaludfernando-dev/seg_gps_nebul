@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
@@ -116,6 +117,21 @@ actual @Composable fun MapLibreView(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // FAB "mi ubicacion": centra la camara en myPosition (zoom 17). Si todavia
+        // no hay fix GPS, vuelve al centro de Rioja.
+        FloatingActionButton(
+            onClick  = {
+                val map = mapHolder.map ?: return@FloatingActionButton
+                val target = myPosition?.let { LatLng(it.latitude, it.longitude) } ?: RIOJA_CENTER
+                val zoom = if (myPosition != null) 17.0 else DEFAULT_ZOOM
+                map.animateCamera(CameraUpdateFactory.newLatLngZoom(target, zoom))
+            },
+            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Text("📍", style = MaterialTheme.typography.titleLarge)
+        }
 
         selectedUser?.let { user ->
             UserPopupCard(

@@ -72,6 +72,10 @@ class RoleViewModel(val currentUser: User) {
                 AppContainer.realtimeRepository.subscribeToSession(sid)
             }
         }
+        // Suscripcion realtime a manzanas para reaccionar al admin web sin esperar polling.
+        if (AppContainer.connectivityObserver.isOnline.value) {
+            AppContainer.realtimeRepository.subscribeToAssignmentsForUser(currentUser.id)
+        }
         // Trigger an immediate PULL so la manzana asignada aparece nada mas entrar.
         scope.launch {
             if (AppContainer.connectivityObserver.isOnline.value) {
@@ -81,6 +85,7 @@ class RoleViewModel(val currentUser: User) {
         }
         pollData()
         subscribeToRealtimeAlerts()
+        subscribeToRealtimeAssignments()
     }
 
     // ── Session control ───────────────────────────────────────────────────────
@@ -197,6 +202,18 @@ class RoleViewModel(val currentUser: User) {
         scope.launch {
             AppContainer.realtimeRepository.newAlerts.collect { event ->
                 if (event.sessionId == _sessionId.value) {
+                    refresh()
+                }
+            }
+        }
+    }
+
+    /** Realtime de manzanas: cuando el admin asigna/edita, hacemos PULL + refresh. */
+    private fun subscribeToRealtimeAssignments() {
+        scope.launch {
+            AppContainer.realtimeRepository.newAssignments.collect { event ->
+                if (event.assignedTo == currentUser.id) {
+                    AppContainer.syncManager.pullAssignmentsForCurrentUser()
                     refresh()
                 }
             }

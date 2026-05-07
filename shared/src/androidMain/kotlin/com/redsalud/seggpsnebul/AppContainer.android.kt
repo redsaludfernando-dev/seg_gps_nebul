@@ -91,6 +91,7 @@ actual object AppContainer {
                 if (!online) return@collectLatest
                 realtimeRepository.connect()
                 currentSessionId.value?.let { realtimeRepository.subscribeToSession(it) }
+                currentUser.value?.id?.let { realtimeRepository.subscribeToAssignmentsForUser(it) }
                 _syncManager.syncAll()
                 while (isActive) {
                     delay(60_000)
