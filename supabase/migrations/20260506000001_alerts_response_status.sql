@@ -13,7 +13,7 @@
 ALTER TABLE alerts
     ADD COLUMN IF NOT EXISTS response_status TEXT
         CHECK (response_status IS NULL OR response_status IN ('on_way','attended')),
-    ADD COLUMN IF NOT EXISTS response_by    TEXT REFERENCES users(id),
+    ADD COLUMN IF NOT EXISTS response_by    UUID REFERENCES users(id),
     ADD COLUMN IF NOT EXISTS responded_at   TIMESTAMPTZ;
 
 -- Indice para que las suscripciones realtime / queries del mapa filtren
