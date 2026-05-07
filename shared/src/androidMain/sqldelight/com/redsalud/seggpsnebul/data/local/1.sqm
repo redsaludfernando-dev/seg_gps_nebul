@@ -1,0 +1,20 @@
+-- v1 → v2: block_assignments.session_id pasa a ser nullable.
+-- SQLite no soporta DROP NOT NULL directamente: reconstruimos la tabla.
+
+CREATE TABLE block_assignments_new (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT,
+    assigned_to TEXT NOT NULL,
+    assigned_by TEXT NOT NULL,
+    block_name TEXT NOT NULL,
+    notes TEXT,
+    assigned_at INTEGER NOT NULL,
+    sync_status TEXT NOT NULL DEFAULT 'pending'
+);
+
+INSERT INTO block_assignments_new(id, session_id, assigned_to, assigned_by, block_name, notes, assigned_at, sync_status)
+SELECT id, session_id, assigned_to, assigned_by, block_name, notes, assigned_at, sync_status
+FROM block_assignments;
+
+DROP TABLE block_assignments;
+ALTER TABLE block_assignments_new RENAME TO block_assignments;

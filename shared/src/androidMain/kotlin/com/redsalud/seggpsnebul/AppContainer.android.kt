@@ -6,6 +6,7 @@ import com.redsalud.seggpsnebul.data.local.DatabaseDriverFactory
 import com.redsalud.seggpsnebul.data.local.LocalDataSource
 import com.redsalud.seggpsnebul.data.local.SegGpsDatabase
 import com.redsalud.seggpsnebul.data.remote.AlertSyncRepository
+import com.redsalud.seggpsnebul.data.remote.AssignmentsRepository
 import com.redsalud.seggpsnebul.data.remote.AuthRepository
 import com.redsalud.seggpsnebul.data.remote.AuthResult
 import com.redsalud.seggpsnebul.data.remote.GpsSyncRepository
@@ -34,6 +35,7 @@ actual object AppContainer {
     private lateinit var _alertSyncRepository: AlertSyncRepository
     private lateinit var _syncManager: SyncManager
     private lateinit var _usersSyncRepository: UsersSyncRepository
+    private lateinit var _assignmentsRepository: AssignmentsRepository
 
     // ── Exposed to androidMain consumers (worker screens, RoleViewModel, etc.) ──
     val db: SegGpsDatabase get() = _db
@@ -43,6 +45,7 @@ actual object AppContainer {
     val alertSyncRepository: AlertSyncRepository get() = _alertSyncRepository
     val syncManager: SyncManager get() = _syncManager
     val usersSyncRepository: UsersSyncRepository get() = _usersSyncRepository
+    val assignmentsRepository: AssignmentsRepository get() = _assignmentsRepository
 
     // ── expect members ────────────────────────────────────────────────────────
     actual val currentUser = MutableStateFlow<User?>(null)
@@ -67,7 +70,14 @@ actual object AppContainer {
         _authRepository = AuthRepository(_localDataSource, _usersSyncRepository)
         _gpsSyncRepository = GpsSyncRepository(_localDataSource)
         _alertSyncRepository = AlertSyncRepository(_localDataSource)
-        _syncManager = SyncManager(_localDataSource, _gpsSyncRepository, _alertSyncRepository)
+        _assignmentsRepository = AssignmentsRepository()
+        _syncManager = SyncManager(
+            localDataSource       = _localDataSource,
+            gpsSyncRepository     = _gpsSyncRepository,
+            alertSyncRepository   = _alertSyncRepository,
+            assignmentsRepository = _assignmentsRepository,
+            currentUserIdProvider = { currentUser.value?.id }
+        )
         _connectivityObserver = createConnectivityObserver()
         _connectivityObserver.start()
         observeConnectivity()

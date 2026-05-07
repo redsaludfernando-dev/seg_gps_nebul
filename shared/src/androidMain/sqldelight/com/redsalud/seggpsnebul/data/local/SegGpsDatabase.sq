@@ -70,10 +70,12 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 -- ============================================================
 -- block_assignments: asignacion de manzanas
+-- session_id es nullable: el admin puede asignar sin jornada activa
+-- (la migracion 1.sqm reescribe la tabla en instalaciones existentes).
 -- ============================================================
 CREATE TABLE IF NOT EXISTS block_assignments (
     id TEXT NOT NULL PRIMARY KEY,
-    session_id TEXT NOT NULL,
+    session_id TEXT,
     assigned_to TEXT NOT NULL,
     assigned_by TEXT NOT NULL,
     block_name TEXT NOT NULL,
@@ -187,6 +189,12 @@ insertBlockAssignment:
 INSERT INTO block_assignments(id, session_id, assigned_to, assigned_by, block_name, notes, assigned_at, sync_status)
 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending');
 
+-- Upsert utilizado por el PULL desde Supabase: marca como 'synced' para no
+-- reenviar al servidor en el siguiente ciclo de sync.
+upsertRemoteBlockAssignment:
+INSERT OR REPLACE INTO block_assignments(id, session_id, assigned_to, assigned_by, block_name, notes, assigned_at, sync_status)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'synced');
+
 selectPendingBlockAssignments:
 SELECT * FROM block_assignments WHERE sync_status = 'pending';
 
@@ -196,9 +204,20 @@ UPDATE block_assignments SET sync_status = 'synced' WHERE id = ?;
 selectBlockAssignmentsBySession:
 SELECT * FROM block_assignments WHERE session_id = ?;
 
-selectMyBlockAssignment:
+selectBlockAssignmentsForUser:
+SELECT * FROM block_assignments
+WHERE assigned_to = ?
+ORDER BY assigned_at DESC;
+
+selectMyBlockAssignmentBySession:
 SELECT * FROM block_assignments
 WHERE session_id = ? AND assigned_to = ?
+ORDER BY assigned_at DESC LIMIT 1;
+
+-- Ultima manzana asignada al trabajador, con o sin jornada.
+selectMyLatestBlockAssignment:
+SELECT * FROM block_assignments
+WHERE assigned_to = ?
 ORDER BY assigned_at DESC LIMIT 1;
 
 -- ============================================================

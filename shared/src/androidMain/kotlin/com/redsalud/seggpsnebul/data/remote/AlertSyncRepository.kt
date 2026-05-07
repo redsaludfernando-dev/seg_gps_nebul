@@ -39,7 +39,7 @@ private data class AlertDto(
 @Serializable
 private data class BlockAssignmentDto(
     val id: String,
-    val session_id: String,
+    val session_id: String?,
     val assigned_to: String,
     val assigned_by: String,
     val block_name: String,

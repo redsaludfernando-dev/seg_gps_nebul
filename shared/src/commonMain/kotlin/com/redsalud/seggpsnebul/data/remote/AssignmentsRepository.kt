@@ -50,6 +50,17 @@ class AssignmentsRepository {
             }
         }
 
+    /** Trae todas las manzanas asignadas a un trabajador (incluidas las sin jornada). */
+    suspend fun fetchByUser(userId: String): Result<List<AssignmentDto>> =
+        withContext(Dispatchers.Default) {
+            runCatching {
+                supabaseClient.postgrest["block_assignments"]
+                    .select { filter { eq("assigned_to", userId) } }
+                    .decodeList<AssignmentDto>()
+                    .sortedByDescending { it.assigned_at }
+            }
+        }
+
     @OptIn(ExperimentalUuidApi::class)
     suspend fun create(
         sessionId: String?,

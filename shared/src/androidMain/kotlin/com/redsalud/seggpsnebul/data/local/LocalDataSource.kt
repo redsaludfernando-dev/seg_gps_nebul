@@ -142,7 +142,7 @@ class LocalDataSource(private val db: SegGpsDatabase) {
 
     fun insertBlockAssignment(
         id: String,
-        sessionId: String,
+        sessionId: String?,
         assignedTo: String,
         assignedBy: String,
         blockName: String,
@@ -154,8 +154,32 @@ class LocalDataSource(private val db: SegGpsDatabase) {
         )
     }
 
+    /** Inserta o reemplaza una asignación traída desde Supabase (marcada como 'synced'). */
+    fun upsertRemoteBlockAssignment(
+        id: String,
+        sessionId: String?,
+        assignedTo: String,
+        assignedBy: String,
+        blockName: String,
+        notes: String?,
+        assignedAt: Long
+    ) {
+        db.segGpsDatabaseQueries.upsertRemoteBlockAssignment(
+            id, sessionId, assignedTo, assignedBy, blockName, notes, assignedAt
+        )
+    }
+
+    /** Última manzana asignada al usuario dentro de una jornada concreta. */
     fun getMyBlockAssignment(sessionId: String, assignedTo: String): Block_assignments? =
-        db.segGpsDatabaseQueries.selectMyBlockAssignment(sessionId, assignedTo).executeAsOneOrNull()
+        db.segGpsDatabaseQueries.selectMyBlockAssignmentBySession(sessionId, assignedTo).executeAsOneOrNull()
+
+    /** Última manzana asignada al usuario, con o sin jornada (admin puede asignar offline). */
+    fun getMyLatestBlockAssignment(assignedTo: String): Block_assignments? =
+        db.segGpsDatabaseQueries.selectMyLatestBlockAssignment(assignedTo).executeAsOneOrNull()
+
+    /** Todas las manzanas asignadas a este trabajador (cualquier jornada). */
+    fun getBlockAssignmentsForUser(assignedTo: String): List<Block_assignments> =
+        db.segGpsDatabaseQueries.selectBlockAssignmentsForUser(assignedTo).executeAsList()
 
     fun getBlockAssignmentsBySession(sessionId: String): List<Block_assignments> =
         db.segGpsDatabaseQueries.selectBlockAssignmentsBySession(sessionId).executeAsList()

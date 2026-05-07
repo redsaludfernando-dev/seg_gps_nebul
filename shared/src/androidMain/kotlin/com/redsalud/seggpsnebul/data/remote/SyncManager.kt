@@ -3,13 +3,16 @@ package com.redsalud.seggpsnebul.data.remote
 import com.redsalud.seggpsnebul.data.local.LocalDataSource
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.datetime.Instant
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 class SyncManager(
     private val localDataSource: LocalDataSource,
     private val gpsSyncRepository: GpsSyncRepository,
-    private val alertSyncRepository: AlertSyncRepository
+    private val alertSyncRepository: AlertSyncRepository,
+    private val assignmentsRepository: AssignmentsRepository,
+    private val currentUserIdProvider: () -> String?
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -74,6 +77,8 @@ class SyncManager(
                     .onFailure { throw Exception("Alertas: ${it.message}") }
                 alertSyncRepository.syncPendingBlockAssignments()
                     .onFailure { throw Exception("Manzanas: ${it.message}") }
+                pullAssignmentsForCurrentUser()
+                    .onFailure { throw Exception("Pull manzanas: ${it.message}") }
                 _lastSyncAt.value = Clock.System.now().toEpochMilliseconds()
             }
 
@@ -97,5 +102,34 @@ class SyncManager(
         _isSyncing.value = false
         refreshCounts()
         return lastResult
+    }
+
+    /**
+     * PULL: descarga las asignaciones del usuario actual desde Supabase y las
+     * upserta localmente como 'synced'. No-op si no hay usuario logueado.
+     *
+     * Se llama dentro de [syncAll], pero también puede invocarse on-demand
+     * (por ejemplo, cuando el RealtimeRepository emite un cambio en
+     * block_assignments para este usuario).
+     */
+    suspend fun pullAssignmentsForCurrentUser(): Result<Unit> = withContext(Dispatchers.IO) {
+        val userId = currentUserIdProvider() ?: return@withContext Result.success(Unit)
+        runCatching {
+            val remote = assignmentsRepository.fetchByUser(userId).getOrThrow()
+            for (a in remote) {
+                val assignedAtMs = runCatching { Instant.parse(a.assigned_at).toEpochMilliseconds() }
+                    .getOrElse { continue }
+                localDataSource.upsertRemoteBlockAssignment(
+                    id          = a.id,
+                    sessionId   = a.session_id,
+                    assignedTo  = a.assigned_to,
+                    assignedBy  = a.assigned_by,
+                    blockName   = a.block_name,
+                    notes       = a.notes,
+                    assignedAt  = assignedAtMs
+                )
+            }
+            Unit
+        }
     }
 }

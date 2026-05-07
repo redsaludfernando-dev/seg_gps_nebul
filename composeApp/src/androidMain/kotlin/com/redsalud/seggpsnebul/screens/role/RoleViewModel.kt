@@ -72,6 +72,13 @@ class RoleViewModel(val currentUser: User) {
                 AppContainer.realtimeRepository.subscribeToSession(sid)
             }
         }
+        // Trigger an immediate PULL so la manzana asignada aparece nada mas entrar.
+        scope.launch {
+            if (AppContainer.connectivityObserver.isOnline.value) {
+                AppContainer.syncManager.pullAssignmentsForCurrentUser()
+                refresh()
+            }
+        }
         pollData()
         subscribeToRealtimeAlerts()
     }
@@ -198,11 +205,15 @@ class RoleViewModel(val currentUser: User) {
 
     fun refresh() {
         val sid = _sessionId.value ?: AppContainer.localDataSource.getActiveSession()?.id
+
+        // La manzana asignada se muestra incluso sin jornada activa: el admin puede
+        // asignar manzanas offline y deben aparecer en cuanto el PULL las traiga.
+        _myBlock.value = AppContainer.localDataSource.getMyLatestBlockAssignment(currentUser.id)
+
         if (sid == null) {
             _pendingAlerts.value = emptyList()
             _allAlerts.value     = emptyList()
             _allBlocks.value     = emptyList()
-            _myBlock.value       = null
             _userPositions.value = emptyList()
             return
         }
@@ -211,7 +222,6 @@ class RoleViewModel(val currentUser: User) {
         _pendingAlerts.value = AppContainer.localDataSource.getUnattendedAlertsBySession(sid)
         _allAlerts.value     = AppContainer.localDataSource.getAlertsBySession(sid)
         _allBlocks.value     = AppContainer.localDataSource.getBlockAssignmentsBySession(sid)
-        _myBlock.value       = AppContainer.localDataSource.getMyBlockAssignment(sid, currentUser.id)
 
         val allUsers = AppContainer.localDataSource.getAllActiveUsers()
         val positions = mutableListOf<UserPosition>()
