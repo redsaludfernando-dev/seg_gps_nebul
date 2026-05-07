@@ -27,6 +27,7 @@ Esta skill condensa las reglas operativas del proyecto. Si una regla aquí entra
 composeApp/src/{commonMain,androidMain,wasmJsMain}/kotlin/com/redsalud/seggpsnebul/
 shared/src/{commonMain,androidMain,wasmJsMain,commonTest}/kotlin/com/redsalud/seggpsnebul/
 shared/src/androidMain/sqldelight/com/redsalud/seggpsnebul/data/local/SegGpsDatabase.sq
+shared/src/androidMain/sqldelight/com/redsalud/seggpsnebul/data/local/N.sqm   # migración v N→v N+1
 supabase/migrations/YYYYMMDDhhmmss_<nombre>.sql
 gradle/libs.versions.toml      # ÚNICA fuente de versiones
 .github/workflows/             # deploy-web.yml + supabase-keepalive.yml
@@ -85,9 +86,13 @@ No marcar tarea completa sin haber compilado los targets afectados. Si no se pue
 
 - Supabase 3.4.x: `select { count(Count.EXACT) }`, `filter("col", FilterOperator.EQ, v)`, importar `io.github.jan.supabase.realtime.realtime` explícito.
 - SQLDelight + K2: nullable cross-module no smart-castea — usar `?.let {}` o variable local.
+- Migraciones SQLDelight (`N.sqm`): SQLite no soporta `ALTER COLUMN` — para cambiar nullability rebuild la tabla. Numerar correlativo desde `1.sqm`. El driver Android aplica las que falten leyendo `PRAGMA user_version`.
+- `users.id` es `UUID` en Supabase; en local lo tratamos como `TEXT`. Las FKs nuevas hacia `users(id)` deben declararse `UUID` en la migración SQL (error `42804` si se pone `TEXT`). Los DTOs de Kotlin pueden seguir usando `String`.
+- Flujo de alertas first-claim: `alerts.response_status` ∈ {NULL, 'on_way', 'attended'}. Quien primero pulsa "Ya voy" captura — los demás solo ven "Atendida". Implementado en `AlertSyncRepository` (Android) y `AlertsAdminRepository` (web).
+- MapLibre Android: `SymbolLayer` con `text-field` necesita `glyphs` URL en el style JSON (`https://demotiles.maplibre.org/font/...`). El puck "mi ubicación" se activa con `enableLocationComponent` después del style; re-llamarlo cada vez que el style se reaplique.
 - wasmJs: sin filesystem; device id en `localStorage`; CSV vía `URL.createObjectURL`.
 - PMTiles: descarga atómica `.tmp` + rename, fuera del hilo principal.
-- GPS Android: 5 s `PRIORITY_HIGH_ACCURACY`. IMU 50 Hz. EKF + Complementario en warm-standby (`LocationFusionEngine.Mode`).
+- GPS Android: 5 s `PRIORITY_HIGH_ACCURACY`. IMU 50 Hz. EKF + Complementario en warm-standby (`LocationFusionEngine.Mode`). Toda la brigada (Jefe, Nebulizador, Anotador, Chofer) captura GPS+IMU — `MainActivity.needsGps()` es exhaustivo sobre los 4 roles.
 
 ## 8. Subagentes / roles para tareas grandes
 

@@ -71,6 +71,7 @@ seg_gps_nebul/
 │       ├── commonMain/sqldelight/  # vacío (los .sq sólo se generan para Android)
 │       ├── androidMain/        # AppContainer.actual completo (SQLDelight, Auth, Sync, Export, PMTiles)
 │       ├── androidMain/sqldelight/com/redsalud/seggpsnebul/data/local/SegGpsDatabase.sq
+│       ├── androidMain/sqldelight/com/redsalud/seggpsnebul/data/local/N.sqm   # migraciones v N→N+1
 │       ├── wasmJsMain/         # AppContainer.actual web (sólo loginAdmin + repos remotos)
 │       └── commonTest/         # 106 tests multiplataforma (KMP-test + coroutines-test)
 │
@@ -258,8 +259,12 @@ Antes de commitear, verifica que ningún `.kt`/`.kts`/`.toml` nuevo haya quedado
   - `postgresChangeFlow` filter: `filter("col", FilterOperator.EQ, value)`, no string crudo.
   - Importar `io.github.jan.supabase.realtime.realtime` explícitamente.
 - **SQLDelight + K2**: propiedades nullable de cross-module no smart-castean. Usar `?.let {}` o variables locales.
+- **Migraciones SQLDelight**: en `shared/src/androidMain/sqldelight/.../` viven `SegGpsDatabase.sq` (esquema actual) y archivos `N.sqm` (migración v `N` → v `N+1`). El driver Android lee `PRAGMA user_version` y aplica las `.sqm` que falten. SQLite no soporta `ALTER COLUMN` para cambiar nullability — hay que reconstruir la tabla (ver `1.sqm` para `block_assignments.session_id`). Las `.sqm` van numeradas correlativamente desde `1.sqm`; no saltar números.
+- **`users.id` es `UUID` en Supabase remoto**, aunque local lo tratamos como `TEXT`. PostgREST acepta UUIDs codificados como string en JSON, así que los DTOs en commonMain pueden seguir usando `String`. Pero al crear una FK SQL hacia `users(id)` desde otra tabla, la columna **debe declararse `UUID`**, no `TEXT` (error `42804 incompatible types`).
+- **Flujo de alertas con `response_status`**: `alerts` tiene cuatro estados: `NULL` (pendiente), `'on_way'` (alguien capturó la alerta diciendo "Ya voy"), `'attended'` (resuelta, equivalente a `is_attended = true`). Regla: el primer dispositivo que pulsa "Ya voy" *captura* la alerta — los demás dejan de ver el botón "Ya voy" y solo pueden cerrarla con "Atendida". Esto evita duplicar atención (admin y chofer no van los dos a la misma solicitud de agua). Implementado en `AlertSyncRepository.pullActiveAlerts/pushAlertOnWay/pushAlertAttended` (Android) y `AlertsAdminRepository.markOnWay/markAttended` (web).
 - **wasmJs**: `Dispatchers.IO` no existe; ningún acceso a filesystem; el "device id" es un UUID generado en `localStorage`; CSV se descarga vía `URL.createObjectURL`.
 - **PMTiles** descarga atómica (`.tmp` + rename). No hacer la descarga en el hilo principal.
+- **MapLibre Android — etiquetas y `LocationComponent`**: las `SymbolLayer` con `text-field` requieren `glyphs` URL en el style JSON (usamos `https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf`, público). Sin internet las etiquetas no se ven, pero el resto del mapa sí. El puck "mi ubicación" se activa con `enableLocationComponent(...)` *después* de cargar el style, y hay que re-llamarlo si el style se reaplica (ej. cuando llegan los PMTiles).
 
 ---
 
