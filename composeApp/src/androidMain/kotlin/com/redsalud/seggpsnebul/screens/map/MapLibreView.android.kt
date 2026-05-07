@@ -94,6 +94,7 @@ actual @Composable fun MapLibreView(
 
     var selectedUser  by remember { mutableStateOf<UserPosition?>(null) }
     var selectedAlert by remember { mutableStateOf<AlertMarker?>(null) }
+    var selectedZone  by remember { mutableStateOf<String?>(null) }
 
     val context     = LocalContext.current
     val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
@@ -124,25 +125,34 @@ actual @Composable fun MapLibreView(
                         }
                         map.addOnMapClickListener { latLng ->
                             val pt = map.projection.toScreenLocation(latLng)
-                            // Alertas tienen prioridad sobre usuarios al hacer click
+                            // Alertas > usuarios > zonas en orden de prioridad al hacer click.
                             val alertHits = map.queryRenderedFeatures(pt, ALERTS_LAYER)
                             if (alertHits.isNotEmpty()) {
                                 val aid = alertHits[0].getStringProperty("alertId") ?: ""
                                 selectedAlert = alertsRef.value.find { it.id == aid }
                                 selectedUser  = null
+                                selectedZone  = null
                                 return@addOnMapClickListener selectedAlert != null
                             }
-                            val features = map.queryRenderedFeatures(pt, LAYER_CIRCLES)
-                            if (features.isNotEmpty()) {
-                                val uid = features[0].getStringProperty("userId") ?: ""
+                            val userHits = map.queryRenderedFeatures(pt, LAYER_CIRCLES)
+                            if (userHits.isNotEmpty()) {
+                                val uid = userHits[0].getStringProperty("userId") ?: ""
                                 selectedUser  = positionsRef.value.find { it.userId == uid }
                                 selectedAlert = null
-                                selectedUser != null
-                            } else {
+                                selectedZone  = null
+                                return@addOnMapClickListener selectedUser != null
+                            }
+                            val zoneHits = map.queryRenderedFeatures(pt, ZONES_FILL)
+                            if (zoneHits.isNotEmpty()) {
+                                selectedZone  = zoneHits[0].getStringProperty("nombre")
                                 selectedUser  = null
                                 selectedAlert = null
-                                false
+                                return@addOnMapClickListener selectedZone != null
                             }
+                            selectedUser  = null
+                            selectedAlert = null
+                            selectedZone  = null
+                            false
                         }
                         onCreate(null)
                     }
@@ -216,6 +226,14 @@ actual @Composable fun MapLibreView(
                 onOnWay   = { onAlertOnWay(alert.id); selectedAlert = null },
                 onAttended = { onAlertAttended(alert.id); selectedAlert = null },
                 onDismiss = { selectedAlert = null }
+            )
+        }
+
+        selectedZone?.let { name ->
+            ZonePopupCard(
+                name      = name,
+                modifier  = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                onDismiss = { selectedZone = null }
             )
         }
     }
@@ -389,6 +407,25 @@ private fun AlertPopupCard(
                 Button(onClick = onAttended, modifier = Modifier.weight(1f)) {
                     Text("Atendida")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZonePopupCard(name: String, modifier: Modifier, onDismiss: () -> Unit) {
+    Card(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically) {
+            Column {
+                Text("Manzana", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(name, style = MaterialTheme.typography.titleMedium)
+            }
+            TextButton(onClick = onDismiss, contentPadding = PaddingValues(0.dp)) {
+                Text("✕")
             }
         }
     }

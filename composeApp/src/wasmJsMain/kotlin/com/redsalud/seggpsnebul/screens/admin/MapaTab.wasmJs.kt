@@ -13,6 +13,7 @@ actual @Composable fun MapaTab(vm: AdminViewModel, onBack: () -> Unit) {
     val tracks       by vm.trackSegments.collectAsState()
     val sessionStats by vm.sessionStats.collectAsState()
     val activeAlerts by vm.activeAlerts.collectAsState()
+    val users        by vm.users.collectAsState()
 
     // Crear geovisor HTML al entrar; destruirlo y mostrar Compose al salir
     DisposableEffect(Unit) {
@@ -42,7 +43,7 @@ actual @Composable fun MapaTab(vm: AdminViewModel, onBack: () -> Unit) {
 
     LaunchedEffect(zonas) { delay(400); updateMapZonas(zonasGeoJson(zonas)) }
 
-    LaunchedEffect(activeAlerts) { updateMapAlerts(alertsGeoJson(activeAlerts)) }
+    LaunchedEffect(activeAlerts, users) { updateMapAlerts(alertsGeoJson(activeAlerts, users)) }
 
     LaunchedEffect(selectedId) {
         selectedId?.let { vm.loadSessionStats(it) }
@@ -137,7 +138,8 @@ private fun tracksGeoJson(tracks: List<TrackSegment>): String {
     return """{"type":"FeatureCollection","features":[$features]}"""
 }
 
-private fun alertsGeoJson(alerts: List<AlertAdminDto>): String {
+private fun alertsGeoJson(alerts: List<AlertAdminDto>, users: List<UserAdminDto>): String {
+    val byId = users.associateBy { it.id }
     val features = alerts.mapNotNull { a ->
         val lat = a.latitude ?: return@mapNotNull null
         val lon = a.longitude ?: return@mapNotNull null
@@ -146,7 +148,10 @@ private fun alertsGeoJson(alerts: List<AlertAdminDto>): String {
         val color  = if (status == "on_way") "#f39c12" else "#e74c3c"
         val msg    = (a.message ?: "").replace("\\","\\\\").replace("\"","\\\"")
         val label  = alertTypeLabel(type)
-        """{"type":"Feature","geometry":{"type":"Point","coordinates":[$lon,$lat]},"properties":{"alertId":"${a.id}","status":"$status","color":"$color","label":"$label","message":"$msg"}}"""
+        val sender = (byId[a.sender_id]?.full_name ?: "—").replace("\\","\\\\").replace("\"","\\\"")
+        val responder = a.response_by?.let { (byId[it]?.full_name ?: "—").replace("\\","\\\\").replace("\"","\\\"") }
+        val responderJson = responder?.let { "\"$it\"" } ?: "null"
+        """{"type":"Feature","geometry":{"type":"Point","coordinates":[$lon,$lat]},"properties":{"alertId":"${a.id}","status":"$status","color":"$color","label":"$label","message":"$msg","sender":"$sender","responder":$responderJson}}"""
     }.joinToString(",")
     return """{"type":"FeatureCollection","features":[$features]}"""
 }
@@ -308,14 +313,25 @@ private fun createGeovisor(): Unit = js("""
     map.addLayer({ id:'alerts-label', type:'symbol', source:'a-src',
       layout:{ 'text-field':'⚠', 'text-size':14, 'text-anchor':'center', 'text-allow-overlap':true },
       paint:{ 'text-color':'#fff' }});
+    map.addLayer({ id:'alerts-name-label', type:'symbol', source:'a-src',
+      layout:{
+        'text-field':['get','sender'],
+        'text-size':11,
+        'text-anchor':'top',
+        'text-offset':[0, 1.2],
+        'text-allow-overlap':true,
+        'text-font':['Open Sans Bold','Arial Unicode MS Bold']
+      },
+      paint:{ 'text-color':'#1a1a1a', 'text-halo-color':'#fff', 'text-halo-width':1.6 }});
 
     map.on('click','alerts-circle', function(e) {
       var p = e.features[0].properties;
       var aid = p.alertId;
-      var html = '<div style="font-family:sans-serif;padding:4px 6px;min-width:180px">' +
+      var html = '<div style="font-family:sans-serif;padding:4px 6px;min-width:200px">' +
         '<div style="font-weight:700;color:#c0392b;margin-bottom:4px">⚠ ' + p.label + '</div>' +
-        (p.message ? '<div style="font-size:12px;margin-bottom:6px">' + p.message + '</div>' : '') +
-        (p.status === 'on_way' ? '<div style="font-size:11px;color:#e67e22;margin-bottom:6px">🟠 En camino</div>' : '') +
+        '<div style="font-size:12px;margin-bottom:4px"><b>De:</b> ' + p.sender + '</div>' +
+        (p.message ? '<div style="font-size:12px;margin-bottom:6px;color:#444">' + p.message + '</div>' : '') +
+        (p.status === 'on_way' ? '<div style="font-size:11px;color:#e67e22;margin-bottom:6px">🟠 En camino: ' + (p.responder || '—') + '</div>' : '') +
         '<div style="display:flex;gap:6px;margin-top:6px">' +
         (p.status !== 'on_way' ? '<button data-act="on_way" data-id="'+aid+'" style="flex:1;padding:6px 8px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px">Ya voy</button>' : '') +
         '<button data-act="attended" data-id="'+aid+'" style="flex:1;padding:6px 8px;background:#27ae60;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px">Atendida</button>' +

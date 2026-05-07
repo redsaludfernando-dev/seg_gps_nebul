@@ -274,10 +274,12 @@ class RoleViewModel(val currentUser: User) {
         _myBlock.value = AppContainer.localDataSource.getMyLatestBlockAssignment(currentUser.id)
 
         // Alertas activas globales (cualquier sesion): se muestran en el mapa.
+        // El sender no se ve a si mismo como marker — ya esta en su ubicacion.
         val active = AppContainer.localDataSource.getActiveAlerts()
         _activeAlerts.value = active
         val users  = AppContainer.localDataSource.getAllActiveUsers().associateBy { it.id }
         _alertMarkers.value = active.mapNotNull { a ->
+            if (a.sender_id == currentUser.id) return@mapNotNull null
             val lat = a.latitude ?: return@mapNotNull null
             val lon = a.longitude ?: return@mapNotNull null
             AlertMarker(
