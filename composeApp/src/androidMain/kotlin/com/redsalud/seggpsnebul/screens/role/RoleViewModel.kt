@@ -8,6 +8,7 @@ import com.redsalud.seggpsnebul.data.remote.ZonasRepository
 import com.redsalud.seggpsnebul.domain.model.AlertType
 import com.redsalud.seggpsnebul.domain.model.User
 import com.redsalud.seggpsnebul.map.PmTilesManager
+import com.redsalud.seggpsnebul.screens.map.AlertMarker
 import com.redsalud.seggpsnebul.screens.map.PmTilesState
 import com.redsalud.seggpsnebul.screens.map.UserPosition
 import kotlinx.coroutines.*
@@ -47,6 +48,14 @@ class RoleViewModel(val currentUser: User) {
 
     private val _allAlerts = MutableStateFlow<List<Alerts>>(emptyList())
     val allAlerts: StateFlow<List<Alerts>> = _allAlerts.asStateFlow()
+
+    /** Todas las alertas activas (pendiente + on_way) de cualquier sesion. */
+    private val _activeAlerts = MutableStateFlow<List<Alerts>>(emptyList())
+    val activeAlerts: StateFlow<List<Alerts>> = _activeAlerts.asStateFlow()
+
+    /** Alertas activas listas para pintar como markers en el mapa (con sender resuelto). */
+    private val _alertMarkers = MutableStateFlow<List<AlertMarker>>(emptyList())
+    val alertMarkers: StateFlow<List<AlertMarker>> = _alertMarkers.asStateFlow()
 
     // ── Block assignments ─────────────────────────────────────────────────────
     private val _myBlock = MutableStateFlow<Block_assignments?>(null)
@@ -159,8 +168,26 @@ class RoleViewModel(val currentUser: User) {
     }
 
     fun markAlertAttended(alertId: String) {
-        AppContainer.localDataSource.markAlertAttended(alertId, currentUser.id)
+        val now = Clock.System.now().toEpochMilliseconds()
+        AppContainer.localDataSource.markAlertAttended(alertId, currentUser.id, now)
         refresh()
+        scope.launch {
+            if (AppContainer.connectivityObserver.isOnline.value) {
+                AppContainer.alertSyncRepository.pushAlertAttended(alertId, currentUser.id, now)
+            }
+        }
+    }
+
+    /** "Ya voy": el usuario captura la alerta sin cerrarla aun. */
+    fun markAlertOnWay(alertId: String) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        AppContainer.localDataSource.markAlertOnWay(alertId, currentUser.id, now)
+        refresh()
+        scope.launch {
+            if (AppContainer.connectivityObserver.isOnline.value) {
+                AppContainer.alertSyncRepository.pushAlertOnWay(alertId, currentUser.id, now)
+            }
+        }
     }
 
     // ── Block assignments ─────────────────────────────────────────────────────
@@ -203,6 +230,11 @@ class RoleViewModel(val currentUser: User) {
     private fun pollData() {
         scope.launch {
             while (isActive) {
+                // Trae alertas activas globales antes de refrescar (asi todos los roles
+                // ven en su mapa lo que pase en otras sesiones).
+                if (AppContainer.connectivityObserver.isOnline.value) {
+                    AppContainer.alertSyncRepository.pullActiveAlerts()
+                }
                 refresh()
                 // Poll faster when Realtime is down so alerts aren't missed
                 val realtimeUp = AppContainer.realtimeRepository.isConnected.value
@@ -240,6 +272,25 @@ class RoleViewModel(val currentUser: User) {
         // La manzana asignada se muestra incluso sin jornada activa: el admin puede
         // asignar manzanas offline y deben aparecer en cuanto el PULL las traiga.
         _myBlock.value = AppContainer.localDataSource.getMyLatestBlockAssignment(currentUser.id)
+
+        // Alertas activas globales (cualquier sesion): se muestran en el mapa.
+        val active = AppContainer.localDataSource.getActiveAlerts()
+        _activeAlerts.value = active
+        val users  = AppContainer.localDataSource.getAllActiveUsers().associateBy { it.id }
+        _alertMarkers.value = active.mapNotNull { a ->
+            val lat = a.latitude ?: return@mapNotNull null
+            val lon = a.longitude ?: return@mapNotNull null
+            AlertMarker(
+                id            = a.id,
+                latitude      = lat,
+                longitude     = lon,
+                alertType     = a.alert_type,
+                status        = a.response_status ?: "pending",
+                senderName    = users[a.sender_id]?.fullName ?: "—",
+                responderName = a.response_by?.let { users[it]?.fullName },
+                createdAt     = a.created_at
+            )
+        }
 
         if (sid == null) {
             _pendingAlerts.value = emptyList()

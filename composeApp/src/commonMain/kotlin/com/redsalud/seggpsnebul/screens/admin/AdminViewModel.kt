@@ -34,6 +34,10 @@ class AdminViewModel {
     private val _alerts = MutableStateFlow<List<AlertAdminDto>>(emptyList())
     val alerts: StateFlow<List<AlertAdminDto>> = _alerts.asStateFlow()
 
+    /** Alertas activas (no atendidas) de cualquier sesion — usadas en el geovisor. */
+    private val _activeAlerts = MutableStateFlow<List<AlertAdminDto>>(emptyList())
+    val activeAlerts: StateFlow<List<AlertAdminDto>> = _activeAlerts.asStateFlow()
+
     private val _sessionStats = MutableStateFlow<Map<String, SessionStats>>(emptyMap())
     val sessionStats: StateFlow<Map<String, SessionStats>> = _sessionStats.asStateFlow()
 
@@ -301,6 +305,43 @@ class AdminViewModel {
         scope.launch {
             alertsRepo.delete(alertId)
                 .onSuccess { _message.value = "Alerta eliminada"; loadAlerts(sessionId) }
+                .onFailure { _message.value = "Error: ${it.message}" }
+        }
+    }
+
+    /** Trae alertas activas para mostrar en el geovisor (cualquier sesion). */
+    fun loadActiveAlerts() {
+        scope.launch {
+            alertsRepo.fetchActive()
+                .onSuccess { _activeAlerts.value = it }
+                .onFailure { _message.value = "Error cargando alertas activas: ${it.message}" }
+        }
+    }
+
+    /** Admin captura la alerta como "Ya voy" (response_status='on_way'). */
+    fun adminAlertOnWay(alertId: String) {
+        scope.launch {
+            // Sin user.id real del admin (login es por email/password), usamos un proxy
+            // legible. RLS no protege este campo y la columna response_by es FK a users
+            // — usamos NULL si no hay match.
+            val responderId = _users.value.firstOrNull { it.role == "jefe_brigada" }?.id
+            if (responderId == null) {
+                _message.value = "No hay jefe de brigada registrado"
+                return@launch
+            }
+            alertsRepo.markOnWay(alertId, responderId)
+                .onSuccess { _message.value = "Captured: en camino"; loadActiveAlerts() }
+                .onFailure { _message.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun adminAlertAttended(alertId: String) {
+        scope.launch {
+            val responderId = _users.value.firstOrNull { it.role == "jefe_brigada" }?.id
+                ?: _users.value.firstOrNull()?.id
+                ?: return@launch
+            alertsRepo.markAttended(alertId, responderId)
+                .onSuccess { _message.value = "Alerta cerrada"; loadActiveAlerts() }
                 .onFailure { _message.value = "Error: ${it.message}" }
         }
     }

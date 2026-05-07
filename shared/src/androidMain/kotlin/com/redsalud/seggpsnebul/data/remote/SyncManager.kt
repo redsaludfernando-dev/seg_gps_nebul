@@ -79,6 +79,8 @@ class SyncManager(
                     .onFailure { throw Exception("Manzanas: ${it.message}") }
                 pullAssignmentsForCurrentUser()
                     .onFailure { throw Exception("Pull manzanas: ${it.message}") }
+                alertSyncRepository.pullActiveAlerts()
+                    .onFailure { throw Exception("Pull alertas: ${it.message}") }
                 _lastSyncAt.value = Clock.System.now().toEpochMilliseconds()
             }
 

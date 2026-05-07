@@ -134,8 +134,38 @@ class LocalDataSource(private val db: SegGpsDatabase) {
         db.segGpsDatabaseQueries.markAlertSynced(id)
     }
 
-    fun markAlertAttended(id: String, attendedBy: String) {
-        db.segGpsDatabaseQueries.markAlertAttended(attendedBy, id)
+    fun markAlertAttended(id: String, attendedBy: String, respondedAt: Long) {
+        db.segGpsDatabaseQueries.markAlertAttended(attendedBy, respondedAt, id)
+    }
+
+    fun markAlertOnWay(id: String, responseBy: String, respondedAt: Long) {
+        db.segGpsDatabaseQueries.markAlertOnWay(responseBy, respondedAt, id)
+    }
+
+    fun getActiveAlerts(): List<Alerts> =
+        db.segGpsDatabaseQueries.selectActiveAlerts().executeAsList()
+
+    fun upsertRemoteAlert(
+        id: String,
+        senderId: String,
+        sessionId: String,
+        alertType: String,
+        message: String?,
+        targetRole: String,
+        latitude: Double?,
+        longitude: Double?,
+        isAttended: Boolean,
+        attendedBy: String?,
+        createdAt: Long,
+        responseStatus: String?,
+        responseBy: String?,
+        respondedAt: Long?
+    ) {
+        db.segGpsDatabaseQueries.upsertRemoteAlert(
+            id, senderId, sessionId, alertType, message, targetRole,
+            latitude, longitude, if (isAttended) 1L else 0L, attendedBy, createdAt,
+            responseStatus, responseBy, respondedAt
+        )
     }
 
     // block_assignments

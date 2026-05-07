@@ -24,6 +24,7 @@ fun AnotadorScreen(vm: RoleViewModel, onLogout: () -> Unit) {
     val myBlock       by vm.myBlock.collectAsState()
     val allAlerts     by vm.allAlerts.collectAsState()
     val zonas         by vm.zonas.collectAsState()
+    val alertMarkers  by vm.alertMarkers.collectAsState()
     
     val message       by vm.message.collectAsState()
 
@@ -59,11 +60,14 @@ fun AnotadorScreen(vm: RoleViewModel, onLogout: () -> Unit) {
                     is PmTilesState.Downloading   -> MapDownloadProgress((pmState as PmTilesState.Downloading).progress)
                     is PmTilesState.Error         -> MapErrorCard((pmState as PmTilesState.Error).msg, vm)
                     is PmTilesState.Ready -> MapLibreView(
-                        modifier      = Modifier.fillMaxSize(),
-                        pmtilesPath   = PmTilesManager.localPath(),
-                        userPositions = userPositions,
-                        myPosition    = myPosition,
-                        zonas         = zonas
+                        modifier        = Modifier.fillMaxSize(),
+                        pmtilesPath     = PmTilesManager.localPath(),
+                        userPositions   = userPositions,
+                        myPosition      = myPosition,
+                        zonas           = zonas,
+                        alerts          = alertMarkers,
+                        onAlertOnWay    = { vm.markAlertOnWay(it) },
+                        onAlertAttended = { vm.markAlertAttended(it) }
                     )
                 }
             }

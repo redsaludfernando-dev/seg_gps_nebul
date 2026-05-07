@@ -65,7 +65,11 @@ CREATE TABLE IF NOT EXISTS alerts (
     is_attended INTEGER NOT NULL DEFAULT 0,
     attended_by TEXT,
     created_at INTEGER NOT NULL,
-    sync_status TEXT NOT NULL DEFAULT 'pending'
+    sync_status TEXT NOT NULL DEFAULT 'pending',
+    -- Estado de respuesta: NULL pendiente, 'on_way' alguien va en camino, 'attended' cerrada
+    response_status TEXT,
+    response_by TEXT,
+    responded_at INTEGER
 );
 
 -- ============================================================
@@ -177,7 +181,24 @@ markAlertSynced:
 UPDATE alerts SET sync_status = 'synced' WHERE id = ?;
 
 markAlertAttended:
-UPDATE alerts SET is_attended = 1, attended_by = ? WHERE id = ?;
+UPDATE alerts SET is_attended = 1, attended_by = ?, response_status = 'attended', responded_at = ? WHERE id = ?;
+
+markAlertOnWay:
+UPDATE alerts SET response_status = 'on_way', response_by = ?, responded_at = ? WHERE id = ?;
+
+-- Upsert utilizado por el PULL desde Supabase: trae alertas que el dispositivo
+-- no creo, las inserta como 'synced' para no reenviarlas.
+upsertRemoteAlert:
+INSERT OR REPLACE INTO alerts(
+    id, sender_id, session_id, alert_type, message, target_role,
+    latitude, longitude, is_attended, attended_by, created_at, sync_status,
+    response_status, response_by, responded_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, ?, ?);
+
+selectActiveAlerts:
+SELECT * FROM alerts
+WHERE response_status IS NULL OR response_status = 'on_way'
+ORDER BY created_at DESC;
 
 selectAlertsBySession:
 SELECT * FROM alerts WHERE session_id = ? ORDER BY created_at DESC;

@@ -33,7 +33,10 @@ private data class AlertDto(
     val longitude: Double?,
     val is_attended: Boolean,
     val attended_by: String?,
-    val created_at: String
+    val created_at: String,
+    val response_status: String? = null,
+    val response_by: String? = null,
+    val responded_at: String? = null
 )
 
 @Serializable
@@ -82,23 +85,92 @@ class AlertSyncRepository(private val localDataSource: LocalDataSource) {
             if (pending.isEmpty()) return@runCatching
             val dtos = pending.map { a ->
                 AlertDto(
-                    id          = a.id,
-                    sender_id   = a.sender_id,
-                    session_id  = a.session_id,
-                    alert_type  = a.alert_type,
-                    message     = a.message,
-                    target_role = a.target_role,
-                    latitude    = a.latitude,
-                    longitude   = a.longitude,
-                    is_attended = a.is_attended == 1L,
-                    attended_by = a.attended_by,
-                    created_at  = Instant.fromEpochMilliseconds(a.created_at).toString()
+                    id              = a.id,
+                    sender_id       = a.sender_id,
+                    session_id      = a.session_id,
+                    alert_type      = a.alert_type,
+                    message         = a.message,
+                    target_role     = a.target_role,
+                    latitude        = a.latitude,
+                    longitude       = a.longitude,
+                    is_attended     = a.is_attended == 1L,
+                    attended_by     = a.attended_by,
+                    created_at      = Instant.fromEpochMilliseconds(a.created_at).toString(),
+                    response_status = a.response_status,
+                    response_by     = a.response_by,
+                    responded_at    = a.responded_at?.let { Instant.fromEpochMilliseconds(it).toString() }
                 )
             }
             supabaseClient.postgrest["alerts"].upsert(dtos)
             pending.forEach { localDataSource.markAlertSynced(it.id) }
         }
     }
+
+    /**
+     * PULL: trae alertas activas de cualquier sesion abierta y las upserta
+     * localmente como 'synced'. Permite que cualquier dispositivo (incluido
+     * el admin web) vea y conteste alertas aunque no las haya creado.
+     */
+    suspend fun pullActiveAlerts() = withContext(Dispatchers.IO) {
+        runCatching {
+            // is_attended=false cubre {pendiente, en_camino} — cuando alguien la cierre
+            // pasa a is_attended=true y deja de aparecer en este pull.
+            val remote = supabaseClient.postgrest["alerts"]
+                .select { filter { eq("is_attended", false) } }
+                .decodeList<AlertDto>()
+            for (a in remote) {
+                val createdMs = runCatching { Instant.parse(a.created_at).toEpochMilliseconds() }
+                    .getOrElse { continue }
+                val respondedMs = a.responded_at?.let {
+                    runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull()
+                }
+                localDataSource.upsertRemoteAlert(
+                    id              = a.id,
+                    senderId        = a.sender_id,
+                    sessionId       = a.session_id,
+                    alertType       = a.alert_type,
+                    message         = a.message,
+                    targetRole      = a.target_role,
+                    latitude        = a.latitude,
+                    longitude       = a.longitude,
+                    isAttended      = a.is_attended,
+                    attendedBy      = a.attended_by,
+                    createdAt       = createdMs,
+                    responseStatus  = a.response_status,
+                    responseBy      = a.response_by,
+                    respondedAt     = respondedMs
+                )
+            }
+            Unit
+        }
+    }
+
+    /** Marca una alerta con response_status='on_way' en Supabase. */
+    suspend fun pushAlertOnWay(alertId: String, responderId: String, respondedAtMs: Long) =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                supabaseClient.postgrest["alerts"].update({
+                    set("response_status", "on_way")
+                    set("response_by", responderId)
+                    set("responded_at", Instant.fromEpochMilliseconds(respondedAtMs).toString())
+                }) { filter { eq("id", alertId) } }
+                Unit
+            }
+        }
+
+    /** Marca una alerta como atendida en Supabase. */
+    suspend fun pushAlertAttended(alertId: String, attendedBy: String, respondedAtMs: Long) =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                supabaseClient.postgrest["alerts"].update({
+                    set("is_attended", true)
+                    set("attended_by", attendedBy)
+                    set("response_status", "attended")
+                    set("responded_at", Instant.fromEpochMilliseconds(respondedAtMs).toString())
+                }) { filter { eq("id", alertId) } }
+                Unit
+            }
+        }
 
     /** Syncs pending block assignments to Supabase. */
     suspend fun syncPendingBlockAssignments() = withContext(Dispatchers.IO) {

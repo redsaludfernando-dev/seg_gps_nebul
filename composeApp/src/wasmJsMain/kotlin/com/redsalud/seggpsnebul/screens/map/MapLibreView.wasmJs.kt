@@ -13,7 +13,10 @@ actual @Composable fun MapLibreView(
     pmtilesPath: String?,
     userPositions: List<UserPosition>,
     myPosition: UserPosition?,
-    zonas: List<ZonaDto>
+    zonas: List<ZonaDto>,
+    alerts: List<AlertMarker>,
+    onAlertOnWay: (String) -> Unit,
+    onAlertAttended: (String) -> Unit
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Mapa disponible solo en aplicación Android.")

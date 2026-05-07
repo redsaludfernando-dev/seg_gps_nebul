@@ -1,0 +1,6 @@
+-- v2 → v3: alerts gana response_status / response_by / responded_at
+-- para soportar el flujo "Ya voy" / "Atendida".
+
+ALTER TABLE alerts ADD COLUMN response_status TEXT;
+ALTER TABLE alerts ADD COLUMN response_by TEXT;
+ALTER TABLE alerts ADD COLUMN responded_at INTEGER;

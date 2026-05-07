@@ -12,6 +12,7 @@ actual @Composable fun MapaTab(vm: AdminViewModel, onBack: () -> Unit) {
     val positions    by vm.livePositions.collectAsState()
     val tracks       by vm.trackSegments.collectAsState()
     val sessionStats by vm.sessionStats.collectAsState()
+    val activeAlerts by vm.activeAlerts.collectAsState()
 
     // Crear geovisor HTML al entrar; destruirlo y mostrar Compose al salir
     DisposableEffect(Unit) {
@@ -41,8 +42,18 @@ actual @Composable fun MapaTab(vm: AdminViewModel, onBack: () -> Unit) {
 
     LaunchedEffect(zonas) { delay(400); updateMapZonas(zonasGeoJson(zonas)) }
 
+    LaunchedEffect(activeAlerts) { updateMapAlerts(alertsGeoJson(activeAlerts)) }
+
     LaunchedEffect(selectedId) {
         selectedId?.let { vm.loadSessionStats(it) }
+    }
+
+    // Refrescar alertas cada 8s
+    LaunchedEffect(Unit) {
+        while (true) {
+            vm.loadActiveAlerts()
+            delay(8_000)
+        }
     }
 
     // Polling: detectar eventos HTML → Kotlin
@@ -56,7 +67,7 @@ actual @Composable fun MapaTab(vm: AdminViewModel, onBack: () -> Unit) {
             if (newSession != null && newSession != selectedId) vm.selectSession(newSession)
 
             // Botón "Actualizar"
-            if (checkGeoRefresh()) { clearGeoRefresh(); vm.selectSession(selectedId) }
+            if (checkGeoRefresh()) { clearGeoRefresh(); vm.selectSession(selectedId); vm.loadActiveAlerts() }
 
             // Toggles de capas
             val layers = consumeLayerChange()
@@ -64,6 +75,15 @@ actual @Composable fun MapaTab(vm: AdminViewModel, onBack: () -> Unit) {
                 setMapLayerGroup("zonas-fill,zonas-line,zonas-label", layers.zonas)
                 setMapLayerGroup("tracks-line", layers.tracks)
                 setMapLayerGroup("pos-circle,pos-label", layers.positions)
+            }
+
+            // Acciones del popup de alerta
+            val action = consumeAlertAction()
+            if (action != null) {
+                when (action.type) {
+                    "on_way"   -> vm.adminAlertOnWay(action.alertId)
+                    "attended" -> vm.adminAlertAttended(action.alertId)
+                }
             }
             delay(120)
         }
@@ -116,6 +136,32 @@ private fun tracksGeoJson(tracks: List<TrackSegment>): String {
     }
     return """{"type":"FeatureCollection","features":[$features]}"""
 }
+
+private fun alertsGeoJson(alerts: List<AlertAdminDto>): String {
+    val features = alerts.mapNotNull { a ->
+        val lat = a.latitude ?: return@mapNotNull null
+        val lon = a.longitude ?: return@mapNotNull null
+        val type   = a.alert_type
+        val status = a.response_status ?: "pending"
+        val color  = if (status == "on_way") "#f39c12" else "#e74c3c"
+        val msg    = (a.message ?: "").replace("\\","\\\\").replace("\"","\\\"")
+        val label  = alertTypeLabel(type)
+        """{"type":"Feature","geometry":{"type":"Point","coordinates":[$lon,$lat]},"properties":{"alertId":"${a.id}","status":"$status","color":"$color","label":"$label","message":"$msg"}}"""
+    }.joinToString(",")
+    return """{"type":"FeatureCollection","features":[$features]}"""
+}
+
+private fun alertTypeLabel(type: String) = when (type) {
+    "agua"               -> "Agua mineral"
+    "gasolina"           -> "Gasolina"
+    "insumo_quimico"     -> "Insumo químico"
+    "averia_maquina"     -> "Avería de máquina"
+    "trabajo_finalizado" -> "Trabajo finalizado"
+    "broadcast_text"     -> "Mensaje a brigada"
+    else                 -> type
+}
+
+data class AlertAction(val alertId: String, val type: String)
 
 private fun roleColor(role: String) = when (role) {
     "nebulizador"  -> "#27ae60"
@@ -239,6 +285,7 @@ private fun createGeovisor(): Unit = js("""
     map.addSource('z-src', { type:'geojson', data:{ type:'FeatureCollection', features:[] }});
     map.addSource('t-src', { type:'geojson', data:{ type:'FeatureCollection', features:[] }});
     map.addSource('p-src', { type:'geojson', data:{ type:'FeatureCollection', features:[] }});
+    map.addSource('a-src', { type:'geojson', data:{ type:'FeatureCollection', features:[] }});
 
     map.addLayer({ id:'zonas-fill',  type:'fill',   source:'z-src', paint:{ 'fill-color':['get','color'], 'fill-opacity':0.18 }});
     map.addLayer({ id:'zonas-line',  type:'line',   source:'z-src', paint:{ 'line-color':['get','color'], 'line-width':2.2 }});
@@ -255,6 +302,40 @@ private fun createGeovisor(): Unit = js("""
       layout:{ 'text-field':['get','initials'], 'text-size':9, 'text-anchor':'center', 'text-font':['Open Sans Bold','Arial Unicode MS Bold'] },
       paint:{ 'text-color':'#fff' }});
 
+    // Alertas activas
+    map.addLayer({ id:'alerts-circle', type:'circle', source:'a-src',
+      paint:{ 'circle-radius':14, 'circle-color':['get','color'], 'circle-stroke-color':'#fff', 'circle-stroke-width':3, 'circle-opacity':0.92 }});
+    map.addLayer({ id:'alerts-label', type:'symbol', source:'a-src',
+      layout:{ 'text-field':'⚠', 'text-size':14, 'text-anchor':'center', 'text-allow-overlap':true },
+      paint:{ 'text-color':'#fff' }});
+
+    map.on('click','alerts-circle', function(e) {
+      var p = e.features[0].properties;
+      var aid = p.alertId;
+      var html = '<div style="font-family:sans-serif;padding:4px 6px;min-width:180px">' +
+        '<div style="font-weight:700;color:#c0392b;margin-bottom:4px">⚠ ' + p.label + '</div>' +
+        (p.message ? '<div style="font-size:12px;margin-bottom:6px">' + p.message + '</div>' : '') +
+        (p.status === 'on_way' ? '<div style="font-size:11px;color:#e67e22;margin-bottom:6px">🟠 En camino</div>' : '') +
+        '<div style="display:flex;gap:6px;margin-top:6px">' +
+        (p.status !== 'on_way' ? '<button data-act="on_way" data-id="'+aid+'" style="flex:1;padding:6px 8px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px">Ya voy</button>' : '') +
+        '<button data-act="attended" data-id="'+aid+'" style="flex:1;padding:6px 8px;background:#27ae60;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px">Atendida</button>' +
+        '</div></div>';
+      var popup = new maplibregl.Popup({ offset:14 }).setLngLat(e.lngLat).setHTML(html).addTo(map);
+      // Bind buttons
+      setTimeout(function() {
+        var pe = popup.getElement();
+        if (!pe) return;
+        pe.querySelectorAll('button[data-act]').forEach(function(btn) {
+          btn.onclick = function() {
+            window._gAlertAction = { type: btn.getAttribute('data-act'), alertId: btn.getAttribute('data-id') };
+            popup.remove();
+          };
+        });
+      }, 0);
+    });
+    map.on('mouseenter','alerts-circle', function() { map.getCanvas().style.cursor='pointer'; });
+    map.on('mouseleave','alerts-circle', function() { map.getCanvas().style.cursor=''; });
+
     map.on('click','pos-circle', function(e) {
       var p = e.features[0].properties;
       new maplibregl.Popup({ offset:14 })
@@ -269,6 +350,7 @@ private fun createGeovisor(): Unit = js("""
     if(window._pZonas)   { map.getSource('z-src').setData(window._pZonas);  window._pZonas=null; }
     if(window._pTracks)  { map.getSource('t-src').setData(window._pTracks); window._pTracks=null; }
     if(window._pPos)     { map.getSource('p-src').setData(window._pPos);    window._pPos=null; }
+    if(window._pAlerts)  { map.getSource('a-src').setData(window._pAlerts); window._pAlerts=null; }
   });
 
   // Eventos del sidebar
@@ -301,7 +383,8 @@ private fun destroyGeovisor(): Unit = js("""
   var sb = document.getElementById('geo-sb');   if(sb) sb.parentNode.removeChild(sb);
   var md = document.getElementById('geo-map');  if(md) md.parentNode.removeChild(md);
   if(window._gEscHandler) document.removeEventListener('keydown', window._gEscHandler);
-  window._pZonas=null; window._pTracks=null; window._pPos=null;
+  window._pZonas=null; window._pTracks=null; window._pPos=null; window._pAlerts=null;
+  window._gAlertAction=null;
   var cv = document.getElementById('ComposeTarget');
   if(cv) cv.style.display='';
 })()
@@ -374,6 +457,25 @@ private fun updateMapPositions(geojson: String): Unit = js("""
 private fun updateMapTracks(geojson: String): Unit = js("""
 (function(g){var d=JSON.parse(g);if(window._gReady)window._gMap.getSource('t-src').setData(d);else window._pTracks=d;})(geojson)
 """)
+
+@OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+private fun updateMapAlerts(geojson: String): Unit = js("""
+(function(g){var d=JSON.parse(g);if(window._gReady)window._gMap.getSource('a-src').setData(d);else window._pAlerts=d;})(geojson)
+""")
+
+@OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+private fun consumeAlertActionJs(): String? = js("""
+(function(){ var v=window._gAlertAction; window._gAlertAction=null; return v?JSON.stringify(v):null; })()
+""")
+
+private fun consumeAlertAction(): AlertAction? {
+    val raw = consumeAlertActionJs() ?: return null
+    return try {
+        val type = Regex("\"type\":\"([^\"]+)\"").find(raw)?.groupValues?.get(1) ?: return null
+        val id   = Regex("\"alertId\":\"([^\"]+)\"").find(raw)?.groupValues?.get(1) ?: return null
+        AlertAction(id, type)
+    } catch (_: Exception) { null }
+}
 
 @OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
 private fun setMapLayerGroup(layerIds: String, visible: Boolean): Unit = js("""

@@ -52,13 +52,18 @@ private const val ZONES_FILL    = "zones-fill"
 private const val ZONES_LINE    = "zones-line"
 private const val ZONES_LABELS_SOURCE = "zones-labels-source"
 private const val ZONES_LABELS_LAYER  = "zones-labels"
+private const val ALERTS_SOURCE       = "alerts-source"
+private const val ALERTS_LAYER        = "alerts-circles"
 
 actual @Composable fun MapLibreView(
     modifier: Modifier,
     pmtilesPath: String?,
     userPositions: List<UserPosition>,
     myPosition: UserPosition?,
-    zonas: List<ZonaDto>
+    zonas: List<ZonaDto>,
+    alerts: List<AlertMarker>,
+    onAlertOnWay: (String) -> Unit,
+    onAlertAttended: (String) -> Unit
 ) {
     var tileServer by remember { mutableStateOf<LocalTileServer?>(null) }
     val mapHolder  = remember { MapHolder() }
@@ -79,13 +84,16 @@ actual @Composable fun MapLibreView(
 
     val positionsRef = remember { mutableStateOf<List<UserPosition>>(emptyList()) }
     val zonasRef     = remember { mutableStateOf<List<ZonaDto>>(emptyList()) }
+    val alertsRef    = remember { mutableStateOf<List<AlertMarker>>(emptyList()) }
 
     LaunchedEffect(userPositions, myPosition) {
         positionsRef.value = buildList { myPosition?.let { add(it) }; addAll(userPositions) }
     }
-    LaunchedEffect(zonas) { zonasRef.value = zonas }
+    LaunchedEffect(zonas)  { zonasRef.value  = zonas }
+    LaunchedEffect(alerts) { alertsRef.value = alerts }
 
-    var selectedUser by remember { mutableStateOf<UserPosition?>(null) }
+    var selectedUser  by remember { mutableStateOf<UserPosition?>(null) }
+    var selectedAlert by remember { mutableStateOf<AlertMarker?>(null) }
 
     val context     = LocalContext.current
     val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
@@ -96,7 +104,7 @@ actual @Composable fun MapLibreView(
         val server = tileServer ?: return@LaunchedEffect
         val map    = mapHolder.map ?: return@LaunchedEffect
         map.setStyle(Style.Builder().fromJson(buildStyleJson(server))) { style ->
-            applyMapLayers(style, positionsRef, zonasRef)
+            applyMapLayers(style, positionsRef, zonasRef, alertsRef)
             enableLocationComponent(context, map, style)
         }
     }
@@ -111,18 +119,29 @@ actual @Composable fun MapLibreView(
                         map.cameraPosition = CameraPosition.Builder()
                             .target(RIOJA_CENTER).zoom(DEFAULT_ZOOM).build()
                         map.setStyle(Style.Builder().fromJson(buildStyleJson(tileServer))) { style ->
-                            applyMapLayers(style, positionsRef, zonasRef)
+                            applyMapLayers(style, positionsRef, zonasRef, alertsRef)
                             enableLocationComponent(ctx, map, style)
                         }
                         map.addOnMapClickListener { latLng ->
-                            val pt       = map.projection.toScreenLocation(latLng)
+                            val pt = map.projection.toScreenLocation(latLng)
+                            // Alertas tienen prioridad sobre usuarios al hacer click
+                            val alertHits = map.queryRenderedFeatures(pt, ALERTS_LAYER)
+                            if (alertHits.isNotEmpty()) {
+                                val aid = alertHits[0].getStringProperty("alertId") ?: ""
+                                selectedAlert = alertsRef.value.find { it.id == aid }
+                                selectedUser  = null
+                                return@addOnMapClickListener selectedAlert != null
+                            }
                             val features = map.queryRenderedFeatures(pt, LAYER_CIRCLES)
                             if (features.isNotEmpty()) {
                                 val uid = features[0].getStringProperty("userId") ?: ""
-                                selectedUser = positionsRef.value.find { it.userId == uid }
+                                selectedUser  = positionsRef.value.find { it.userId == uid }
+                                selectedAlert = null
                                 selectedUser != null
                             } else {
-                                selectedUser = null; false
+                                selectedUser  = null
+                                selectedAlert = null
+                                false
                             }
                         }
                         onCreate(null)
@@ -137,6 +156,8 @@ actual @Composable fun MapLibreView(
                     ?.setGeoJson(buildZonesCollection(zonasRef.value))
                 style.getSourceAs<GeoJsonSource>(ZONES_LABELS_SOURCE)
                     ?.setGeoJson(buildZoneLabelsCollection(zonasRef.value))
+                style.getSourceAs<GeoJsonSource>(ALERTS_SOURCE)
+                    ?.setGeoJson(buildAlertsCollection(alertsRef.value))
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -187,6 +208,16 @@ actual @Composable fun MapLibreView(
                 onDismiss = { selectedUser = null }
             )
         }
+
+        selectedAlert?.let { alert ->
+            AlertPopupCard(
+                alert     = alert,
+                modifier  = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                onOnWay   = { onAlertOnWay(alert.id); selectedAlert = null },
+                onAttended = { onAlertAttended(alert.id); selectedAlert = null },
+                onDismiss = { selectedAlert = null }
+            )
+        }
     }
 }
 
@@ -227,7 +258,8 @@ private fun enableLocationComponent(
 private fun applyMapLayers(
     style: Style,
     positionsRef: State<List<UserPosition>>,
-    zonasRef: State<List<ZonaDto>>
+    zonasRef: State<List<ZonaDto>>,
+    alertsRef: State<List<AlertMarker>>
 ) {
     style.addSource(GeoJsonSource(ZONES_SOURCE, FeatureCollection.fromFeatures(emptyList())))
     style.addLayer(
@@ -266,12 +298,26 @@ private fun applyMapLayers(
             circleStrokeColor("#ffffff")
         )
     )
+    // Alertas: marker mas grande con color por estado.
+    style.addSource(GeoJsonSource(ALERTS_SOURCE, FeatureCollection.fromFeatures(emptyList())))
+    style.addLayer(
+        CircleLayer(ALERTS_LAYER, ALERTS_SOURCE).withProperties(
+            circleRadius(13f),
+            circleColor(get("color")),
+            circleStrokeWidth(3f),
+            circleStrokeColor("#ffffff"),
+            circleOpacity(0.92f)
+        )
+    )
     positionsRef.value.takeIf { it.isNotEmpty() }?.let {
         style.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(buildFeatureCollection(it))
     }
     zonasRef.value.takeIf { it.isNotEmpty() }?.let { zonas ->
         style.getSourceAs<GeoJsonSource>(ZONES_SOURCE)?.setGeoJson(buildZonesCollection(zonas))
         style.getSourceAs<GeoJsonSource>(ZONES_LABELS_SOURCE)?.setGeoJson(buildZoneLabelsCollection(zonas))
+    }
+    alertsRef.value.takeIf { it.isNotEmpty() }?.let {
+        style.getSourceAs<GeoJsonSource>(ALERTS_SOURCE)?.setGeoJson(buildAlertsCollection(it))
     }
 }
 
@@ -307,6 +353,57 @@ private fun UserPopupCard(user: UserPosition, modifier: Modifier, onDismiss: () 
     }
 }
 
+@Composable
+private fun AlertPopupCard(
+    alert: AlertMarker,
+    modifier: Modifier,
+    onOnWay: () -> Unit,
+    onAttended: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Card(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(8.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                Text("⚠ ${alertTypeLabel(alert.alertType)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = onDismiss, contentPadding = PaddingValues(0.dp)) {
+                    Text("✕")
+                }
+            }
+            Text("De: ${alert.senderName}", style = MaterialTheme.typography.bodyMedium)
+            Text(relativeTime(alert.createdAt), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (alert.status == "on_way") {
+                Text("🟠 En camino: ${alert.responderName ?: "—"}",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (alert.status != "on_way") {
+                    OutlinedButton(onClick = onOnWay, modifier = Modifier.weight(1f)) {
+                        Text("Ya voy")
+                    }
+                }
+                Button(onClick = onAttended, modifier = Modifier.weight(1f)) {
+                    Text("Atendida")
+                }
+            }
+        }
+    }
+}
+
+private fun alertTypeLabel(type: String) = when (type) {
+    "agua"               -> "Agua mineral"
+    "gasolina"           -> "Gasolina"
+    "insumo_quimico"     -> "Insumo químico"
+    "averia_maquina"     -> "Avería de máquina"
+    "trabajo_finalizado" -> "Trabajo finalizado"
+    "broadcast_text"     -> "Mensaje a brigada"
+    else                 -> type
+}
+
 // ─── Builders ─────────────────────────────────────────────────────────────────
 
 private class MapHolder { var map: MapLibreMap? = null }
@@ -336,6 +433,24 @@ private fun buildZonesCollection(zonas: List<ZonaDto>): FeatureCollection {
         }.getOrNull()
     }
     return FeatureCollection.fromFeatures(features)
+}
+
+private fun buildAlertsCollection(alerts: List<AlertMarker>): FeatureCollection {
+    val features = alerts.map { a ->
+        val props = JsonObject().apply {
+            addProperty("alertId",   a.id)
+            addProperty("alertType", a.alertType)
+            addProperty("status",    a.status)
+            addProperty("color",     alertStatusColor(a.status))
+        }
+        Feature.fromGeometry(Point.fromLngLat(a.longitude, a.latitude), props)
+    }
+    return FeatureCollection.fromFeatures(features)
+}
+
+private fun alertStatusColor(status: String) = when (status) {
+    "on_way" -> "#f39c12"   // ambar — alguien en camino
+    else     -> "#e74c3c"   // rojo — pendiente
 }
 
 /** Genera un Feature de tipo Point en el centroide de cada poligono, con la propiedad nombre. */
