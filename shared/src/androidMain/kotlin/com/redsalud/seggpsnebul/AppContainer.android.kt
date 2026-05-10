@@ -1,5 +1,7 @@
 package com.redsalud.seggpsnebul
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.redsalud.seggpsnebul.connectivity.ConnectivityObserver
 import com.redsalud.seggpsnebul.connectivity.createConnectivityObserver
 import com.redsalud.seggpsnebul.data.local.DatabaseDriverFactory
@@ -13,8 +15,10 @@ import com.redsalud.seggpsnebul.data.remote.GpsSyncRepository
 import com.redsalud.seggpsnebul.data.remote.RealtimeRepository
 import com.redsalud.seggpsnebul.data.remote.SyncManager
 import com.redsalud.seggpsnebul.data.remote.UsersSyncRepository
+import com.redsalud.seggpsnebul.data.remote.supabaseClient
 import com.redsalud.seggpsnebul.domain.model.User
 import com.redsalud.seggpsnebul.domain.model.UserRole
+import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,6 +40,7 @@ actual object AppContainer {
     private lateinit var _syncManager: SyncManager
     private lateinit var _usersSyncRepository: UsersSyncRepository
     private lateinit var _assignmentsRepository: AssignmentsRepository
+    private lateinit var _prefs: SharedPreferences
 
     // ── Exposed to androidMain consumers (worker screens, RoleViewModel, etc.) ──
     val db: SegGpsDatabase get() = _db
@@ -53,17 +58,68 @@ actual object AppContainer {
     actual val realtimeRepository = RealtimeRepository()
     actual val connectivityObserver: ConnectivityObserver get() = _connectivityObserver
 
-    actual suspend fun loginAdmin(email: String, password: String): AuthResult =
-        _authRepository.loginAdmin(email, password)
+    actual suspend fun loginAdmin(email: String, password: String): AuthResult {
+        val r = _authRepository.loginAdmin(email, password)
+        // Supabase Auth ya persiste la sesion automaticamente (Settings/SharedPrefs).
+        // Limpiamos cualquier worker cacheado: sesiones admin y worker son excluyentes.
+        if (r is AuthResult.AdminSuccess) clearCachedWorker()
+        return r
+    }
 
-    actual suspend fun loginWorker(dni: String, pin: String): AuthResult =
-        _authRepository.loginWorker(dni, pin)
+    actual suspend fun loginWorker(dni: String, pin: String): AuthResult {
+        val r = _authRepository.loginWorker(dni, pin)
+        if (r is AuthResult.WorkerSuccess) cacheWorkerId(r.user.id)
+        return r
+    }
 
-    actual suspend fun registerWorker(dni: String, fullName: String, role: UserRole, pin: String): AuthResult =
-        _authRepository.registerWorker(dni, fullName, role, pin)
+    actual suspend fun registerWorker(dni: String, fullName: String, role: UserRole, pin: String): AuthResult {
+        val r = _authRepository.registerWorker(dni, fullName, role, pin)
+        if (r is AuthResult.WorkerSuccess) cacheWorkerId(r.user.id)
+        return r
+    }
+
+    actual suspend fun tryRestoreSession(): RestoreResult {
+        // 1) Sesion Supabase Auth (admin) tiene prioridad — el SDK la restaura
+        //    desde Settings/SharedPreferences en su init. currentSessionOrNull()
+        //    devuelve null si no hay JWT valido.
+        runCatching {
+            if (supabaseClient.auth.currentSessionOrNull() != null) {
+                clearCachedWorker()
+                return RestoreResult.Admin
+            }
+        }
+        // 2) Worker cacheado en SharedPreferences → resolver en SQLite local.
+        val cachedId = _prefs.getString(KEY_WORKER_ID, null) ?: return RestoreResult.None
+        val u = _localDataSource.getUserById(cachedId) ?: run {
+            clearCachedWorker(); return RestoreResult.None
+        }
+        if (!u.isActive) { clearCachedWorker(); return RestoreResult.None }
+        // No seteamos currentUser aqui — App.kt lo hace una vez navegado a WorkerHome.
+        return RestoreResult.Worker(u)
+    }
+
+    actual suspend fun signOutAdmin() {
+        runCatching { supabaseClient.auth.signOut() }
+        currentUser.value = null
+    }
+
+    actual suspend fun signOutWorker() {
+        clearCachedWorker()
+        currentUser.value = null
+        currentSessionId.value = null
+    }
+
+    private fun cacheWorkerId(id: String) {
+        _prefs.edit().putString(KEY_WORKER_ID, id).apply()
+    }
+
+    private fun clearCachedWorker() {
+        _prefs.edit().remove(KEY_WORKER_ID).apply()
+    }
 
     // ── Init (called from MainActivity) ──────────────────────────────────────
-    fun init(driverFactory: DatabaseDriverFactory) {
+    fun init(context: Context, driverFactory: DatabaseDriverFactory) {
+        _prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         _db = SegGpsDatabase(driverFactory.createDriver())
         _localDataSource = LocalDataSource(_db)
         _usersSyncRepository = UsersSyncRepository()
@@ -100,4 +156,7 @@ actual object AppContainer {
             }
         }
     }
+
+    private const val PREFS_NAME    = "seg_gps_nebul_session"
+    private const val KEY_WORKER_ID = "cached_worker_id"
 }

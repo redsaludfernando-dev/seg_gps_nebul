@@ -41,6 +41,9 @@ class LocalDataSource(private val db: SegGpsDatabase) {
     fun getUserByDni(dni: String): User? =
         db.segGpsDatabaseQueries.selectUserByDni(dni).executeAsOneOrNull()?.toUser()
 
+    fun getUserById(id: String): User? =
+        db.segGpsDatabaseQueries.selectUserById(id).executeAsOneOrNull()?.toUser()
+
     fun getAllActiveUsers(): List<User> =
         db.segGpsDatabaseQueries.selectAllUsers().executeAsList().map { it.toUser() }
 

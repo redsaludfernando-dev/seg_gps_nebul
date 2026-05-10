@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DeviceIdProvider.init(this)
-        AppContainer.init(DatabaseDriverFactory(this))
+        AppContainer.init(applicationContext, DatabaseDriverFactory(this))
         enableEdgeToEdge()
         setContent {
             App()

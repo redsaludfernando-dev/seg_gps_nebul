@@ -47,4 +47,24 @@ actual object AppContainer {
 
     actual suspend fun registerWorker(dni: String, fullName: String, role: UserRole, pin: String): AuthResult =
         AuthResult.Error("Registro de trabajador no disponible en versión web")
+
+    actual suspend fun tryRestoreSession(): RestoreResult {
+        // Supabase Auth restaura el JWT desde localStorage automaticamente al
+        // crearse el cliente. Esperamos a que termine la carga inicial — si
+        // existe una sesion valida, la consideramos sesion de admin (web no
+        // soporta login worker).
+        return runCatching {
+            supabaseClient.auth.awaitInitialization()
+            if (supabaseClient.auth.currentSessionOrNull() != null) RestoreResult.Admin
+            else RestoreResult.None
+        }.getOrDefault(RestoreResult.None)
+    }
+
+    actual suspend fun signOutAdmin() {
+        runCatching { supabaseClient.auth.signOut() }
+    }
+
+    actual suspend fun signOutWorker() {
+        // No-op: web no tiene sesion worker.
+    }
 }

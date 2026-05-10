@@ -12,6 +12,8 @@
 -- admin no se ven, ni en pull periodico ni via Realtime.
 -- ============================================================
 
+DROP POLICY IF EXISTS "block_assignments_select_anon" ON block_assignments;
+
 CREATE POLICY "block_assignments_select_anon"
     ON block_assignments FOR SELECT TO anon
     USING (true);

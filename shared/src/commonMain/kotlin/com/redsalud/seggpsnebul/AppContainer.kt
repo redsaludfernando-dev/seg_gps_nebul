@@ -21,4 +21,24 @@ expect object AppContainer {
     suspend fun loginAdmin(email: String, password: String): AuthResult
     suspend fun loginWorker(dni: String, pin: String): AuthResult
     suspend fun registerWorker(dni: String, fullName: String, role: UserRole, pin: String): AuthResult
+
+    /**
+     * Intenta restaurar la sesion previa al arrancar la app.
+     * - En Android: prioriza el JWT de admin (si existe), si no, usa el ultimo
+     *   worker logueado guardado en SharedPreferences resolviendolo en SQLite.
+     * - En Web: solo admin (Supabase Auth restaura el JWT desde localStorage).
+     */
+    suspend fun tryRestoreSession(): RestoreResult
+
+    /** Cierra la sesion Supabase Auth del admin (web y Android admin). */
+    suspend fun signOutAdmin()
+
+    /** Limpia el worker cacheado en Android (no-op en web). */
+    suspend fun signOutWorker()
+}
+
+sealed interface RestoreResult {
+    data class Worker(val user: User) : RestoreResult
+    data object Admin : RestoreResult
+    data object None : RestoreResult
 }

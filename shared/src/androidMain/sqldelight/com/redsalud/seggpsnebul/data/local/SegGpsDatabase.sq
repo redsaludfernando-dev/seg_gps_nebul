@@ -123,6 +123,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?);
 selectUserByDni:
 SELECT * FROM users WHERE dni = ?;
 
+selectUserById:
+SELECT * FROM users WHERE id = ?;
+
 selectAllUsers:
 SELECT * FROM users WHERE is_active = 1;
 
