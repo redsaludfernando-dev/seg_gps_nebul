@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package com.redsalud.seggpsnebul.screens.admin
 
 import androidx.compose.foundation.layout.*
@@ -14,7 +16,7 @@ import com.redsalud.seggpsnebul.data.remote.AssignmentDto
 import com.redsalud.seggpsnebul.data.remote.SessionAdminDto
 import com.redsalud.seggpsnebul.data.remote.SessionStats
 import com.redsalud.seggpsnebul.data.remote.UserAdminDto
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 @Composable
 fun JornadasTab(vm: AdminViewModel) {

@@ -4,7 +4,7 @@ import com.redsalud.seggpsnebul.domain.model.AlertType
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 import kotlin.math.PI
 import kotlin.math.atan2

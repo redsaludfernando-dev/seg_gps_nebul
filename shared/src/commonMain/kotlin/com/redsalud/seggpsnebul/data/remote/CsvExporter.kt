@@ -1,9 +1,11 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package com.redsalud.seggpsnebul.data.remote
 
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import com.redsalud.seggpsnebul.domain.model.AlertType

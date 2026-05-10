@@ -3,9 +3,9 @@ package com.redsalud.seggpsnebul.data.remote
 import com.redsalud.seggpsnebul.data.local.LocalDataSource
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.datetime.Instant
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 class SyncManager(
     private val localDataSource: LocalDataSource,

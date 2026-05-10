@@ -1,9 +1,11 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package com.redsalud.seggpsnebul.screens.admin
 
 import androidx.compose.runtime.*
 import com.redsalud.seggpsnebul.data.remote.*
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 actual @Composable fun MapaTab(vm: AdminViewModel, onBack: () -> Unit) {
     val zonas        by vm.zonas.collectAsState()
@@ -304,7 +306,7 @@ private fun createGeovisor(): Unit = js("""
     map.addLayer({ id:'pos-circle', type:'circle', source:'p-src',
       paint:{ 'circle-radius':10, 'circle-color':['get','color'], 'circle-stroke-color':'#fff', 'circle-stroke-width':2.5 }});
     map.addLayer({ id:'pos-label', type:'symbol', source:'p-src',
-      layout:{ 'text-field':['get','initials'], 'text-size':9, 'text-anchor':'center', 'text-font':['Open Sans Bold','Arial Unicode MS Bold'] },
+      layout:{ 'text-field':['get','initials'], 'text-size':9, 'text-anchor':'center', 'text-font':['Open Sans Semibold','Noto Sans Regular'] },
       paint:{ 'text-color':'#fff' }});
 
     // Alertas activas
@@ -320,7 +322,7 @@ private fun createGeovisor(): Unit = js("""
         'text-anchor':'top',
         'text-offset':[0, 1.2],
         'text-allow-overlap':true,
-        'text-font':['Open Sans Bold','Arial Unicode MS Bold']
+        'text-font':['Open Sans Semibold','Noto Sans Regular']
       },
       paint:{ 'text-color':'#1a1a1a', 'text-halo-color':'#fff', 'text-halo-width':1.6 }});
 
