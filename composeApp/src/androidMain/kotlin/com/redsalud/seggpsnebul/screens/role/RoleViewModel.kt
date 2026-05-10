@@ -229,13 +229,18 @@ class RoleViewModel(val currentUser: User) {
 
     private fun pollData() {
         scope.launch {
+            var tick = 0
             while (isActive) {
                 // Trae alertas activas globales antes de refrescar (asi todos los roles
                 // ven en su mapa lo que pase en otras sesiones).
                 if (AppContainer.connectivityObserver.isOnline.value) {
                     AppContainer.alertSyncRepository.pullActiveAlerts()
+                    // Pull manzanas cada 3 ticks (~30s con realtime up) — fallback por si
+                    // el evento Realtime de block_assignments no llega.
+                    if (tick % 3 == 0) AppContainer.syncManager.pullAssignmentsForCurrentUser()
                 }
                 refresh()
+                tick++
                 // Poll faster when Realtime is down so alerts aren't missed
                 val realtimeUp = AppContainer.realtimeRepository.isConnected.value
                 delay(if (realtimeUp) 10_000L else 5_000L)
