@@ -29,7 +29,11 @@
 -keep class app.cash.sqldelight.** { *; }
 -dontwarn com.squareup.sqldelight.**
 -dontwarn app.cash.sqldelight.**
--keep class com.redsalud.seggpsnebul.db.** { *; }
+# Clases generadas por SQLDelight (data classes Sessions, Gps_tracks, Alerts,
+# Block_assignments, Allowed_users, Users + SegGpsDatabaseQueries). Viven en
+# packageName declarado en shared/build.gradle.kts. Sin esto R8 podria
+# eliminar las data classes que solo se construyen via reflection.
+-keep class com.redsalud.seggpsnebul.data.local.** { *; }
 
 # ── OkHttp (used by Ktor) ─────────────────────────────────────────────────────
 -dontwarn okhttp3.**

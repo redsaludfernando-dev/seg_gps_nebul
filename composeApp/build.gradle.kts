@@ -97,6 +97,7 @@ android {
 
     buildTypes {
         debug {
+            // x86_64 para emulador del Studio + arm64-v8a para celular fisico.
             ndk { abiFilters += listOf("x86_64", "arm64-v8a") }
         }
         release {
@@ -109,7 +110,20 @@ android {
             if (keystoreAvailable) {
                 signingConfig = signingConfigs.getByName("release")
             }
-            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+            // ABIs incluidas en release:
+            //   - arm64-v8a:    todos los celulares modernos (Android 5+ con CPU ARMv8).
+            //   - armeabi-v7a:  celulares antiguos / dispositivos baratos con CPU ARMv7.
+            //   - x86_64:       opt-in via env var INCLUDE_X86_64_RELEASE=true.
+            //                   Solo necesario si quieres correr el APK release en un
+            //                   emulador Android Studio (arquitectura Intel/AMD).
+            //                   Suma ~10-12 MB al APK por la lib nativa libmaplibre.so.
+            // libmaplibre.so es la mayor contribucion al peso (~10 MB por ABI).
+            ndk {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+                if (System.getenv("INCLUDE_X86_64_RELEASE")?.lowercase() == "true") {
+                    abiFilters += "x86_64"
+                }
+            }
         }
     }
 
