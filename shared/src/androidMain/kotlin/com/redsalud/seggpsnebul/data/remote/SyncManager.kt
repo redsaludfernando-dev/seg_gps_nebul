@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package com.redsalud.seggpsnebul.data.remote
 
 import com.redsalud.seggpsnebul.data.local.LocalDataSource

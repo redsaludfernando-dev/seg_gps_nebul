@@ -75,12 +75,23 @@ android {
         versionName = "1.1.1"
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile     = file(System.getenv("KEYSTORE_PATH") ?: "keystore/release.jks")
-            storePassword = System.getenv("KEYSTORE_PASS") ?: ""
-            keyAlias      = System.getenv("KEY_ALIAS")     ?: "seggps"
-            keyPassword   = System.getenv("KEY_PASS")      ?: ""
+    // Solo registramos el signing config 'release' si el keystore existe en disco.
+    // El keystore es secreto y no esta en el repo (ver CLAUDE.md). Cuando no esta:
+    //   - assembleRelease produce un APK *no firmado* en
+    //     composeApp/build/outputs/apk/release/, que el usuario firma desde
+    //     Android Studio (Build → Generate Signed Bundle / APK).
+    //   - validateSigningRelease no se queja porque el config no se aplico.
+    val keystorePath = System.getenv("KEYSTORE_PATH") ?: "keystore/release.jks"
+    val keystoreFile = file(keystorePath)
+    val keystoreAvailable = keystoreFile.exists()
+    if (keystoreAvailable) {
+        signingConfigs {
+            create("release") {
+                storeFile     = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASS") ?: ""
+                keyAlias      = System.getenv("KEY_ALIAS")     ?: "seggps"
+                keyPassword   = System.getenv("KEY_PASS")      ?: ""
+            }
         }
     }
 
@@ -95,7 +106,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            if (keystoreAvailable) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         }
     }
