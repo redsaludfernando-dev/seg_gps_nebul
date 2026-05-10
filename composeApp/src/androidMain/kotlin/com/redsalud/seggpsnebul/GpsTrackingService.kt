@@ -29,10 +29,23 @@ class GpsTrackingService : Service() {
     private lateinit var imuProvider: ImuProvider
     private val fusionEngine = LocationFusionEngine(LocationFusionEngine.Mode.EKF)
 
+    // Periodo de estabilizacion: en dispositivos antiguos el primer fix puede llegar
+    // con accuracy de >100 m y contaminar el track. Descartamos fixes hasta tener uno
+    // con accuracy <= STABILIZATION_ACCEPT_ACCURACY_M o hasta agotar STABILIZATION_MAX_WAIT_MS.
+    private var stabilized   = false
+    private var serviceStartMs = 0L
+
     // GPS callback — runs on main looper (same thread as ImuProvider callbacks)
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             result.lastLocation?.let { loc ->
+                if (!stabilized) {
+                    val elapsed = System.currentTimeMillis() - serviceStartMs
+                    val accurate = loc.accuracy <= STABILIZATION_ACCEPT_ACCURACY_M
+                    val patient  = elapsed >= STABILIZATION_MAX_WAIT_MS
+                    if (!accurate && !patient) return     // descartar fix imprecio inicial
+                    stabilized = true
+                }
                 val fused = fusionEngine.onGpsFix(
                     latDeg     = loc.latitude,
                     lonDeg     = loc.longitude,
@@ -60,6 +73,8 @@ class GpsTrackingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIF_ID, buildNotification())
+        serviceStartMs = System.currentTimeMillis()
+        stabilized = false
         imuProvider.start()
         requestLocationUpdates()
         listenForAlerts()
@@ -153,5 +168,7 @@ class GpsTrackingService : Service() {
         private const val GPS_INTERVAL_MS    = 5_000L   // request a fix every 5 s
         private const val GPS_MIN_INTERVAL_MS = 4_000L  // accept fixes no faster than 4 s
         private const val GPS_MAX_DELAY_MS   = 8_000L   // batch tolerance
+        private const val STABILIZATION_ACCEPT_ACCURACY_M = 30f  // umbral para considerar GPS "estable"
+        private const val STABILIZATION_MAX_WAIT_MS = 30_000L    // espera maxima en GPS pobres
     }
 }

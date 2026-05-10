@@ -15,6 +15,7 @@ actual @Composable fun MapLibreView(
     myPosition: UserPosition?,
     zonas: List<ZonaDto>,
     alerts: List<AlertMarker>,
+    assignedBlockName: String?,
     onAlertOnWay: (String) -> Unit,
     onAlertAttended: (String) -> Unit
 ) {

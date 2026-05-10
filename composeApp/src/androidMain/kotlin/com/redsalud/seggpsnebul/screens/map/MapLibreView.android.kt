@@ -24,6 +24,7 @@ import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.location.modes.CameraMode
@@ -62,6 +63,7 @@ actual @Composable fun MapLibreView(
     myPosition: UserPosition?,
     zonas: List<ZonaDto>,
     alerts: List<AlertMarker>,
+    assignedBlockName: String?,
     onAlertOnWay: (String) -> Unit,
     onAlertAttended: (String) -> Unit
 ) {
@@ -171,6 +173,33 @@ actual @Composable fun MapLibreView(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // FAB "Zoom a mi manzana": busca la manzana asignada por nombre en `zonas`,
+        // calcula su bbox y centra el mapa. Solo se muestra si hay assignedBlockName
+        // y la manzana correspondiente esta en la lista de zonas KML publicadas.
+        val targetZone = remember(assignedBlockName, zonasRef.value) {
+            val name = assignedBlockName?.trim()?.takeIf { it.isNotEmpty() } ?: return@remember null
+            zonasRef.value.firstOrNull { it.nombre.trim().equals(name, ignoreCase = true) }
+        }
+        if (targetZone != null) {
+            FloatingActionButton(
+                onClick = {
+                    val map = mapHolder.map ?: return@FloatingActionButton
+                    val bounds = polygonBounds(targetZone)
+                    if (bounds != null) {
+                        map.animateCamera(
+                            CameraUpdateFactory.newLatLngBounds(bounds, 80)
+                        )
+                    } else {
+                        Toast.makeText(context, "No se pudo ubicar la manzana", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 88.dp),
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            ) {
+                Text("🎯", style = MaterialTheme.typography.titleLarge)
+            }
+        }
 
         // FAB "mi ubicacion": prefiere myPosition (track del foreground service);
         // si no hay fix todavia (sin jornada activa o GPS recien arrancado),
@@ -489,6 +518,28 @@ private fun alertStatusColor(status: String) = when (status) {
     "on_way" -> "#f39c12"   // ambar — alguien en camino
     else     -> "#e74c3c"   // rojo — pendiente
 }
+
+/**
+ * Calcula el bounding box de una zona (Polygon GeoJSON).
+ * Devuelve null si la geometria no es parseable o esta vacia.
+ */
+private fun polygonBounds(zona: ZonaDto): LatLngBounds? = runCatching {
+    val poly = GjPolygon.fromJson(zona.geojson.toString())
+    val ring = poly.outer().coordinates()
+    if (ring.size < 3) return@runCatching null
+    var minLat = Double.MAX_VALUE; var maxLat = -Double.MAX_VALUE
+    var minLng = Double.MAX_VALUE; var maxLng = -Double.MAX_VALUE
+    for (p in ring) {
+        if (p.latitude()  < minLat) minLat = p.latitude()
+        if (p.latitude()  > maxLat) maxLat = p.latitude()
+        if (p.longitude() < minLng) minLng = p.longitude()
+        if (p.longitude() > maxLng) maxLng = p.longitude()
+    }
+    LatLngBounds.Builder()
+        .include(LatLng(minLat, minLng))
+        .include(LatLng(maxLat, maxLng))
+        .build()
+}.getOrNull()
 
 /** Genera un Feature de tipo Point en el centroide de cada poligono, con la propiedad nombre. */
 private fun buildZoneLabelsCollection(zonas: List<ZonaDto>): FeatureCollection {

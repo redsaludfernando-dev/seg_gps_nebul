@@ -28,6 +28,7 @@ fun ChoferScreen(vm: RoleViewModel, onLogout: () -> Unit) {
     val message       by vm.message.collectAsState()
     val zonas         by vm.zonas.collectAsState()
     val alertMarkers  by vm.alertMarkers.collectAsState()
+    val myBlock       by vm.myBlock.collectAsState()
 
     var selectedTab by remember { mutableStateOf(ChoferTab.SOLICITUDES) }
 
@@ -134,14 +135,15 @@ fun ChoferScreen(vm: RoleViewModel, onLogout: () -> Unit) {
                             is PmTilesState.Downloading   -> MapDownloadProgress((pmState as PmTilesState.Downloading).progress)
                             is PmTilesState.Error         -> MapErrorCard((pmState as PmTilesState.Error).msg, vm)
                             is PmTilesState.Ready -> MapLibreView(
-                                modifier        = Modifier.fillMaxSize(),
-                                pmtilesPath     = PmTilesManager.localPath(),
-                                userPositions   = userPositions,
-                                myPosition      = myPosition,
-                                zonas           = zonas,
-                                alerts          = alertMarkers,
-                                onAlertOnWay    = { vm.markAlertOnWay(it) },
-                                onAlertAttended = { vm.markAlertAttended(it) }
+                                modifier          = Modifier.fillMaxSize(),
+                                pmtilesPath       = PmTilesManager.localPath(),
+                                userPositions     = userPositions,
+                                myPosition        = myPosition,
+                                zonas             = zonas,
+                                alerts            = alertMarkers,
+                                assignedBlockName = myBlock?.block_name,
+                                onAlertOnWay      = { vm.markAlertOnWay(it) },
+                                onAlertAttended   = { vm.markAlertAttended(it) }
                             )
                         }
                     }

@@ -37,6 +37,12 @@ expect @Composable fun MapLibreView(
     myPosition: UserPosition?,
     zonas: List<ZonaDto> = emptyList(),
     alerts: List<AlertMarker> = emptyList(),
+    /**
+     * Nombre de la manzana asignada al usuario actual. Si no es null y existe
+     * en `zonas` con ese nombre, se muestra un FAB extra que enfoca el mapa
+     * sobre el polígono.
+     */
+    assignedBlockName: String? = null,
     onAlertOnWay: (String) -> Unit = {},
     onAlertAttended: (String) -> Unit = {}
 )
