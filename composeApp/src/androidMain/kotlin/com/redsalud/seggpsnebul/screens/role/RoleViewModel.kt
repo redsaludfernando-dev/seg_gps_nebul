@@ -238,6 +238,12 @@ class RoleViewModel(val currentUser: User) {
                     // Pull manzanas cada 3 ticks (~30s con realtime up) — fallback por si
                     // el evento Realtime de block_assignments no llega.
                     if (tick % 3 == 0) AppContainer.syncManager.pullAssignmentsForCurrentUser()
+                    // Recargar zonas (manzanas KML) si quedaron vacias o cada 6 ticks
+                    // (~60s) — el admin puede subir/cambiar el KML mientras el trabajador
+                    // esta en jornada y queremos que aparezcan sin re-login.
+                    if (_zonas.value.isEmpty() || tick % 6 == 0) {
+                        zonasRepo.fetchZonas().onSuccess { _zonas.value = it }
+                    }
                 }
                 refresh()
                 tick++

@@ -174,24 +174,43 @@ actual @Composable fun MapLibreView(
             modifier = Modifier.fillMaxSize()
         )
 
-        // FAB "Zoom a mi manzana": busca la manzana asignada por nombre en `zonas`,
-        // calcula su bbox y centra el mapa. Solo se muestra si hay assignedBlockName
-        // y la manzana correspondiente esta en la lista de zonas KML publicadas.
-        val targetZone = remember(assignedBlockName, zonasRef.value) {
-            val name = assignedBlockName?.trim()?.takeIf { it.isNotEmpty() } ?: return@remember null
-            zonasRef.value.firstOrNull { it.nombre.trim().equals(name, ignoreCase = true) }
-        }
-        if (targetZone != null) {
+        // FAB "Zoom a mi manzana": aparece SIEMPRE que el trabajador tenga manzana
+        // asignada. El lookup en `zonas` se hace al pulsar — si no se encuentra
+        // (KML no publicado, nombre distinto), mostramos Toast con el motivo en
+        // vez de ocultar el boton silenciosamente.
+        val rawAssigned = assignedBlockName?.trim()?.takeIf { it.isNotEmpty() }
+        if (rawAssigned != null) {
             FloatingActionButton(
                 onClick = {
                     val map = mapHolder.map ?: return@FloatingActionButton
-                    val bounds = polygonBounds(targetZone)
+                    val zonasNow = zonasRef.value
+                    if (zonasNow.isEmpty()) {
+                        Toast.makeText(context,
+                            "Manzanas KML aún no cargadas. Verifica conexión.",
+                            Toast.LENGTH_SHORT).show()
+                        return@FloatingActionButton
+                    }
+                    // Match por nombre (case-insensitive) o como prefijo si el
+                    // nombre publicado es "MZ 312" y el assignment dice "Manzana 1".
+                    val zona = zonasNow.firstOrNull {
+                        it.nombre.trim().equals(rawAssigned, ignoreCase = true)
+                    } ?: zonasNow.firstOrNull {
+                        val n = it.nombre.trim()
+                        n.startsWith(rawAssigned, ignoreCase = true) ||
+                            rawAssigned.startsWith(n, ignoreCase = true)
+                    }
+                    if (zona == null) {
+                        Toast.makeText(context,
+                            "Manzana \"$rawAssigned\" no esta publicada en el KML",
+                            Toast.LENGTH_LONG).show()
+                        return@FloatingActionButton
+                    }
+                    val bounds = polygonBounds(zona)
                     if (bounds != null) {
-                        map.animateCamera(
-                            CameraUpdateFactory.newLatLngBounds(bounds, 80)
-                        )
+                        map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 80))
                     } else {
-                        Toast.makeText(context, "No se pudo ubicar la manzana", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Geometria de la manzana invalida",
+                            Toast.LENGTH_SHORT).show()
                     }
                 },
                 modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 88.dp),
